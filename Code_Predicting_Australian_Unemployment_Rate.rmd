@@ -1,0 +1,2697 @@
+---
+title: "MA5832_Assignment_3_Kuruvilla_Rijo"
+author: "Rijo"
+date: "2023-10-08"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r}
+# Load necessary libraries
+library(caTools)
+library(caret)
+library(MASS)
+library(corrplot)
+library(tidyverse)
+library(tidyr)
+library(car)
+library(ggplot2)
+library(car)
+library(summarytools)
+library(lubridate)
+# library(dplyr)
+library(readxl)
+library(psych)
+library(e1071)
+library(pROC)
+library(glmnet)
+library(rpart)
+library(ipred)
+#library(Hmisc)
+library(mice)
+library(missForest)
+library(randomForest)
+
+
+# # Neural Network Library
+# # Installing Keras
+# #install.packages("keras")
+# library(keras)
+# library(remotes)
+# # remotes::install_github(paste0("rstudio/", c("reticulate", "tensorflow", "keras")))
+# # reticulate::install_python()
+# # install_tensorflow(envname = "r-tensorflow")
+# library(tensorflow)
+
+```
+
+# Set the working directory
+```{r}
+getwd() # Get the current working directory
+setwd('D:/DATA_SCIENCE_MASTERS/MA5832_Data_Mining_and_Machine_Learning/Assessment/A3') # set the working directory
+```
+
+
+# Load the Data Set
+```{r}
+unemployment_rate = read.csv("Aus_data_2023.csv")
+# View(unemployment_rate) # View the data
+str(unemployment_rate) # Structure of the data
+dim(unemployment_rate)  # Dimensions of the data : 166 x 9 
+```
+ dim(unemployment_rate)
+[1] 166   9
+
+# EDA
+
+# I. Change Column Names
+
+# Original Column Names 
+Y : unemployment rate measured in percentage
+X1: Percentage change in Gross domestic product;
+X2: Percentage change in the Government final consumption expenditure;
+X3: Percentage change in final consumption expenditure of all industry sectors;
+X4: Term of trade index (percentage)
+X5: Consumer Price Index of all groups (CPI) ;
+X6: Number of job vacancies measured in thousands;
+X7: Estimated Resident Population in thousands
+
+# Rename Columns
+```{r}
+# Set New Column Names
+new_column_names = c("Year_Month","Unemployment_Rate","Percentage_change_GDP",
+                     "Percentage_change_GFCE","Percentage_change_FCEAI","Term_of_TI",
+                     "Consumer_Price_Index","Job_Vacancies","Estimated_Resident_Population")
+
+# Rename the old column names to new column names
+unemployment_rate = unemployment_rate %>% rename(Year_Month = "Year_Q",
+                                  Unemployment_Rate = "Y",
+                                  Percentage_change_GDP = "X1",
+                                  Percentage_change_GFCE = "X2",
+                                  Percentage_change_FCEAI = "X3",
+                                  Term_of_TI = "X4",
+                                  Consumer_Price_Index = "X5",
+                                  Job_Vacancies = "X6",
+                                  Estimated_Resident_Population = "X7")
+# Renamed column names 
+str(unemployment_rate)
+```
+# New Column Names
+> str(unemployment_rate)
+
+'data.frame':	166 obs. of  9 variables:
+ $ Year_Month                   : chr  "1982_Dec" "1982_Jun" "1982_Mar" "1982_Sep" ...
+ $ Unemployment_Rate            : num  8.79 6.57 6.21 7.11 9.71 ...
+ $ Percentage_change_GDP        : num  -1.9 0.5 -1.2 -1 1.4 -0.5 -1.3 2.5 0.3 0.8 ...
+ $ Percentage_change_GFCE       : num  5.3 7.9 -3.2 -5.9 5.5 2.1 4.8 -4.9 -11.4 3.7 ...
+ $ Percentage_change_FCEAI      : num  1.7 3.4 -0.1 -1.3 0.5 -0.6 0.7 0.6 -0.5 -0.2 ...
+ $ Term_of_TI                   : num  -1 2.5 -2.9 -0.5 1.3 1.2 0.5 -0.2 -0.3 0.5 ...
+ $ Consumer_Price_Index         : num  33.6 31.5 30.8 32.6 36.5 35 34.3 35.6 37.4 36.4 ...
+ $ Job_Vacancies                : num  28.6 31.2 36.4 28.4 37.6 31.7 30.3 34.3 52.3 43.5 ...
+ $ Estimated_Resident_Population: num  15289 15184 15122 15239 15484 ...
+ 
+---------------------------------------------------------------------------------------------
+
+---------------------------------------------------------------------------------------------
+# Data Type Transformations 
+```{r}
+# 1. Transform the "Year_Q" column
+str(unemployment_rate)
+
+# Create a new data frame with the Year_Month column
+year_month = data.frame(Year_Month = unemployment_rate$Year_Month)
+
+# Split the Year_Month column into Year and Month Column
+year_month = separate(year_month, Year_Month,into = c("Year","Month"), sep = "_")
+#str(year_month)
+
+# Add this new column to the Original Data Frame
+unemployment_rate = cbind(unemployment_rate,year_month)
+# Remove the first column which consists of the "Year_Month" combined data
+unemployment_rate = unemployment_rate[,-1]
+
+#-------------------------------------------------------------------------------------------
+# Convert  "Year" to "Date" Format
+
+unemployment_rate$Year = as.Date(unemployment_rate$Year , format('%Y'))
+# Extract only Year
+unemployment_rate$Year = year(unemployment_rate$Year)
+str(unemployment_rate)
+
+#------------------------------------------------------------------------------------------
+# Create a new column named "Quarter"
+
+months = c("Mar", "Jun", "Sep", "Dec")
+quarters = c(1, 2, 3, 4)
+# Create the "Quarter" column based on the "Month" values
+unemployment_rate$Quarter = quarters[match(unemployment_rate$Month, months)]
+#View(unemployment_rate)
+str(unemployment_rate)
+```
+
+
+# 1. Check for Missing Values
+```{r}
+is.na(unemployment_rate)  # Check for missing values
+colSums(is.na(unemployment_rate))  # Count the number of missing values per column
+# which(colSums(is.na(unemployment_rate))>0) # Identify the position of the columns with atleast one missing value
+names(which(colSums(is.na(unemployment_rate))>0))  # Return the column names with missing values
+```
+
+> colSums(is.na(unemployment_rate))  # Count the number of missing values per column
+
+            Unemployment_Rate         Percentage_change_GDP        Percentage_change_GFCE       Percentage_change_FCEAI 
+                            0                             1                             1                             1 
+                   Term_of_TI          Consumer_Price_Index                 Job_Vacancies Estimated_Resident_Population 
+                            1                             0                             5                             2 
+                         Year                         Month                       Quarter 
+                            0                             0                             0
+# Comments: The following are the columns with the number of missing values 
+"Percentage_change_GDP" = 1, 
+"Percentage_change_GFCE" = 1, 
+"Percentage_change_FCEAI" = 1,
+"Term_of_TI" = 1, 
+"Job_Vacancies" = 5
+"Estimated_Resident_Population" = 2 
+
+## -- i. Using Uivariate Imputation to Handle Missing Values
+```{r}
+
+## BEFORE IMPUTATION
+# Check if the variables are  normally distributed or not, before proceeding with mean or median
+summary(unemployment_rate$Percentage_change_GDP)
+summary(unemployment_rate$Percentage_change_GFCE)
+summary(unemployment_rate$Percentage_change_FCEAI)
+summary(unemployment_rate$Term_of_TI)
+summary(unemployment_rate$Job_Vacancies)
+summary(unemployment_rate$Estimated_Resident_Population)
+
+# Transforming the Left Skewed Vairable 
+summary(unemployment_rate$Percentage_change_GFCE)
+summary(sqrt(unemployment_rate$Percentage_change_GFCE)) # Square- Root Transformation
+summary((unemployment_rate$Percentage_change_GFCE)^(1/3)) # Cube- Root Transformation
+
+# GGPLOT RESULTS - Before Imputation
+p1 = ggplot(data = unemployment_rate, mapping = aes(Percentage_change_GDP)) + geom_histogram(bins = 40, colour = "black") + ggtitle('Percentage_change_GDP - Before Imputation')
+p2 = ggplot(data = unemployment_rate, mapping = aes(Percentage_change_GFCE)) + geom_histogram(bins = 40, colour = "black") + ggtitle('Percentage_change_GFCE - Before Imputation')
+p3 = ggplot(data = unemployment_rate, mapping = aes(Percentage_change_FCEAI)) + geom_histogram(bins = 40, colour = "black") + ggtitle('Percentage_change_FCEAI - Before Imputation')
+p4 = ggplot(data = unemployment_rate, mapping = aes(Term_of_TI)) + geom_histogram(bins = 40, colour = "black") + ggtitle('Term_of_TI - Before Imputation')
+p5 = ggplot(data = unemployment_rate, mapping = aes(Job_Vacancies)) + geom_histogram(bins = 40, colour = "black") + ggtitle('Job_Vacancies - Before Imputation')
+p6 = ggplot(data = unemployment_rate, mapping = aes(Estimated_Resident_Population)) + geom_histogram(bins = 40, colour = "black") + ggtitle('Estimated_Resident_Population - Before Imputation')
+gridExtra::grid.arrange(p1,p2,p3,p4,p5,p6, nrow = 3)
+
+# Apply Univariate Imputation using MEDIAN
+imputed_Percentage_change_GDP = replace(unemployment_rate$Percentage_change_GDP,
+                     is.na(unemployment_rate$Percentage_change_GDP),
+                     median(unemployment_rate$Percentage_change_GDP , na.rm = TRUE))
+imputed_Percentage_change_GFCE = replace(unemployment_rate$Percentage_change_GFCE,
+                     is.na(unemployment_rate$Percentage_change_GFCE),
+                     median(unemployment_rate$Percentage_change_GFCE , na.rm = TRUE))
+imputed_Percentage_change_FCEAI = replace(unemployment_rate$Percentage_change_FCEAI,
+                     is.na(unemployment_rate$Percentage_change_FCEAI),
+                     median(unemployment_rate$Percentage_change_FCEAI , na.rm = TRUE))
+imputed_Term_of_TI = replace(unemployment_rate$Term_of_TI,
+                     is.na(unemployment_rate$Term_of_TI),
+                     median(unemployment_rate$Term_of_TI , na.rm = TRUE))
+imputed_Job_Vacancies = replace(unemployment_rate$Job_Vacancies,
+                     is.na(unemployment_rate$Job_Vacancies),
+                     median(unemployment_rate$Job_Vacancies , na.rm = TRUE))
+imputed_Estimated_Resident_Population = replace(unemployment_rate$Estimated_Resident_Population,
+                     is.na(unemployment_rate$Estimated_Resident_Population),
+                     median(unemployment_rate$Estimated_Resident_Population , na.rm = TRUE))
+
+# GGPLOT RESULTS - After Median Imputation 
+p1_1 = ggplot(as.data.frame(imputed_Percentage_change_GDP), mapping = aes(imputed_Percentage_change_GDP)) + geom_histogram(bins = 40, colour = "pink") + ggtitle('Percentage_change_GDP - After Median Imputation')
+p1_2 = ggplot(as.data.frame(imputed_Percentage_change_GFCE), mapping = aes(imputed_Percentage_change_GFCE)) + geom_histogram(bins = 40, colour = "pink") + ggtitle('Percentage_change_GFCE - After Median Imputation')
+p1_3 = ggplot(as.data.frame(imputed_Percentage_change_FCEAI), mapping = aes(imputed_Percentage_change_FCEAI)) + geom_histogram(bins = 40, colour = "pink") + ggtitle('Percentage_change_FCEAI - After Median Imputation')
+p1_4 = ggplot(as.data.frame(imputed_Term_of_TI), mapping = aes(imputed_Term_of_TI)) + geom_histogram(bins = 40, colour = "pink") + ggtitle('Term_of_TI - After Median Imputation')
+p1_5 = ggplot(as.data.frame(imputed_Job_Vacancies), mapping = aes(imputed_Job_Vacancies)) + geom_histogram(bins = 40, colour = "pink") + ggtitle('Job_Vacancies - After Median Imputation')
+p1_6 = ggplot(as.data.frame(imputed_Estimated_Resident_Population), mapping = aes(imputed_Estimated_Resident_Population)) + geom_histogram(bins = 40, colour = "pink") + ggtitle('Estimated_Resident_Population - After Median Imputation')
+gridExtra::grid.arrange(p1_1,p1_2,p1_3,p1_4,p1_5,p1_6, nrow = 3)
+
+```
+                
+# -- ii.  Missing Values using Predictive Mean Matching (PMM)
+```{r}
+unemployment_rate_1 = unemployment_rate
+set.seed(99) # set seed to maintain model consistency
+# Impute missing values using PMM
+pmm_imputed_Percentage_change_GDP_1 = complete(mice(unemployment_rate_1, method = "pmm"))$Percentage_change_GDP
+pmm_imputed_Percentage_change_GFCE_1 = complete(mice(unemployment_rate_1, method = "pmm"))$Percentage_change_GFCE 
+pmm_imputed_Percentage_change_FCEAI_1 = complete(mice(unemployment_rate_1, method = "pmm"))$Percentage_change_FCEAI
+pmm_imputed_Term_of_TI_1 = complete(mice(unemployment_rate_1, method = "pmm"))$Term_of_TI
+pmm_imputed_Job_Vacancies_1 = complete(mice(unemployment_rate_1, method = "pmm"))$Job_Vacancies
+pmm_imputed_Estimated_Resident_Population_1 = complete(mice(unemployment_rate_1, method = "pmm"))$Estimated_Resident_Population
+    
+pmm_imputed_values = data.frame(pmm_imputed_Percentage_change_GDP_1,
+              pmm_imputed_Percentage_change_GFCE_1,
+              pmm_imputed_Percentage_change_FCEAI_1,
+              pmm_imputed_Term_of_TI_1,
+              pmm_imputed_Job_Vacancies_1,
+              pmm_imputed_Estimated_Resident_Population_1)
+# View(imputed_values)
+
+is.na(pmm_imputed_values)  # Check for missing values
+colSums(is.na(pmm_imputed_values))  # Count the number of missing values per column
+## Missing Values successfully imputed using PMM
+
+
+# Checking the distribution of the data after imputation
+
+p1_1 =  ggplot(data = pmm_imputed_values, mapping = aes(pmm_imputed_Percentage_change_GDP_1)) + geom_histogram(bins = 40, colour = "green") + ggtitle('Percentage_change_GDP - After Imputation using PMM')
+
+p1_2 =  ggplot(data = pmm_imputed_values, mapping = aes(pmm_imputed_Percentage_change_GFCE_1)) + geom_histogram(bins = 40, colour = "green") + ggtitle('Percentage_change_GFCE - After Imputation using PMM')
+
+p1_3 =  ggplot(data = pmm_imputed_values, mapping = aes(pmm_imputed_Percentage_change_FCEAI_1)) + geom_histogram(bins = 40, colour = "green") + ggtitle('Percentage_change_FCEAI - After Imputation using PMM')
+
+p1_4 =  ggplot(data = pmm_imputed_values, mapping = aes(pmm_imputed_Term_of_TI_1)) + geom_histogram(bins = 40, colour = "green") + ggtitle('Term_of_TI - After Imputation using PMM')
+
+p1_5 =  ggplot(data = pmm_imputed_values, mapping = aes(pmm_imputed_Job_Vacancies_1)) + geom_histogram(bins = 40, colour = "green") + ggtitle('Job_Vacancies - After Imputation using PMM')
+
+p1_6 =  ggplot(data = pmm_imputed_values, mapping = aes(pmm_imputed_Estimated_Resident_Population_1)) + geom_histogram(bins = 40, colour = "green") + ggtitle('Estimated_Resident_Population - After Imputation using PMM')
+
+gridExtra::grid.arrange(p1_1,p1_2,p1_3,p1_4,p1_5,p1_6, nrow = 3)
+
+# After Imputation Results
+
+## BEFORE IMPUTATION
+# Check if the variables are  normally distributed or not, before proceeding with mean or median
+summary(pmm_imputed_values$imputed_Percentage_change_GDP_1)
+summary(pmm_imputed_values$imputed_Percentage_change_GFCE_1)
+summary(pmm_imputed_values$imputed_Percentage_change_FCEAI_1)
+summary(pmm_imputed_values$imputed_Term_of_TI_1)
+summary(pmm_imputed_values$imputed_Job_Vacancies_1)
+summary(pmm_imputed_values$imputed_Estimated_Resident_Population_1)
+```
+
+Before Imputation:
+> summary(unemployment_rate$Percentage_change_GDP)
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max.    NA's 
+ -6.800   0.000   0.400   0.403   0.800   3.800       1 
+> summary(unemployment_rate$Percentage_change_GFCE)
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max.    NA's 
+-11.400  -0.100   1.400   1.175   2.600  14.900       1 
+> summary(unemployment_rate$Percentage_change_FCEAI)
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max.    NA's 
+-8.2000  0.4000  0.8000  0.7867  1.2000  6.0000       1 
+> summary(unemployment_rate$Term_of_TI)
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max.    NA's 
+-9.7000 -1.1000  0.4000  0.4927  2.0000 11.3000       1 
+> summary(unemployment_rate$Job_Vacancies)
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max.    NA's 
+   28.4    70.4   105.1   132.2   173.6   454.2       5 
+> summary(unemployment_rate$Estimated_Resident_Population)
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max.    NA's 
+  15122   17469   19522   20102   22857   26268       2
+
+After Imputation:
+> summary(imputed_values$imputed_Percentage_change_GDP_1)
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+-6.8000  0.0000  0.4000  0.4042  0.7750  3.8000 
+> summary(imputed_values$imputed_Percentage_change_GFCE_1)
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+-11.400  -0.175   1.400   1.138   2.600  14.900 
+> summary(imputed_values$imputed_Percentage_change_FCEAI_1)
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+-8.2000  0.4000  0.7500  0.7801  1.2000  6.0000 
+> summary(imputed_values$imputed_Term_of_TI_1)
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+-9.7000 -1.0750  0.4000  0.5139  2.0750 11.3000 
+> summary(imputed_values$imputed_Job_Vacancies_1)
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+  28.40   70.85  108.05  133.24  173.57  454.20 
+> summary(imputed_values$imputed_Estimated_Resident_Population_1)
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+  15122   17490   19577   20171   23014   26268 
+
+-----------------------------------------------------------------------------
+
+#iii. ---Imputed Values Using CART
+
+```{r}
+
+# Compare the Distributions
+unemployment_rate_2 = unemployment_rate
+set.seed(99) # set seed to maintain model consistency
+# Impute missing values using PMM
+cart_imputed_Percentage_change_GDP_1 = complete(mice(unemployment_rate_2, method = "cart"))$Percentage_change_GDP
+cart_imputed_Percentage_change_GFCE_1 = complete(mice(unemployment_rate_2, method = "cart"))$Percentage_change_GFCE 
+cart_imputed_Percentage_change_FCEAI_1 = complete(mice(unemployment_rate_2, method = "cart"))$Percentage_change_FCEAI
+cart_imputed_Term_of_TI_1 = complete(mice(unemployment_rate_2, method = "cart"))$Term_of_TI
+cart_imputed_Job_Vacancies_1 = complete(mice(unemployment_rate_2, method = "cart"))$Job_Vacancies
+cart_imputed_Estimated_Resident_Population_1 = complete(mice(unemployment_rate_2, method = "cart"))$Estimated_Resident_Population
+    
+cart_imputed_values = data.frame(cart_imputed_Percentage_change_GDP_1,
+              cart_imputed_Percentage_change_GFCE_1,
+              cart_imputed_Percentage_change_FCEAI_1,
+              cart_imputed_Term_of_TI_1,
+              cart_imputed_Job_Vacancies_1,
+              cart_imputed_Estimated_Resident_Population_1)
+# View(cart_imputed_values)
+
+# Checking the distribution of the data after imputation - CART
+
+p1_1_cart =  ggplot(data = cart_imputed_values, mapping = aes(cart_imputed_Percentage_change_GDP_1)) + geom_histogram(bins = 40, colour = "yellow") + ggtitle('Percentage_change_GDP - After Imputation using CART')
+
+p1_2_cart =  ggplot(data = cart_imputed_values, mapping = aes(cart_imputed_Percentage_change_GFCE_1)) + geom_histogram(bins = 40, colour = "yellow") + ggtitle('Percentage_change_GFCE - After Imputation using CART')
+
+p1_3_cart =  ggplot(data = cart_imputed_values, mapping = aes(cart_imputed_Percentage_change_FCEAI_1)) + geom_histogram(bins = 40, colour = "yellow") + ggtitle('Percentage_change_FCEAI - After Imputation using CART')
+
+p1_4_cart = ggplot(data = cart_imputed_values, mapping = aes(cart_imputed_Term_of_TI_1)) + geom_histogram(bins = 40, colour = "yellow") + ggtitle('Term_of_TI - After Imputation using CART')
+
+p1_5_cart =  ggplot(data = cart_imputed_values, mapping = aes(cart_imputed_Job_Vacancies_1)) + geom_histogram(bins = 40, colour = "yellow") + ggtitle('Job_Vacancies - After Imputation using CART')
+
+p1_6_cart =  ggplot(data = cart_imputed_values, mapping = aes(cart_imputed_Estimated_Resident_Population_1)) + geom_histogram(bins = 40, colour = "yellow") + ggtitle('Estimated_Resident_Population - After Imputation using CART')
+
+gridExtra::grid.arrange(p1_1_cart,p1_2_cart,p1_3_cart,p1_4_cart,p1_5_cart,p1_6_cart, nrow = 3)
+
+
+```
+
+------------------------------------------------------------------------------
+
+#iii. ---Imputed Values Using LASSO
+
+```{r}
+# Compare the Distributions
+unemployment_rate_3 = unemployment_rate
+set.seed(99) # set seed to maintain model consistency
+# Impute missing values using PMM
+lasso_imputed_Percentage_change_GDP_1 = complete(mice(unemployment_rate_3, method = "lasso.norm"))$Percentage_change_GDP
+lasso_imputed_Percentage_change_GFCE_1 = complete(mice(unemployment_rate_3, method = "lasso.norm"))$Percentage_change_GFCE 
+lasso_imputed_Percentage_change_FCEAI_1 = complete(mice(unemployment_rate_3, method = "lasso.norm"))$Percentage_change_FCEAI
+lasso_imputed_Term_of_TI_1 = complete(mice(unemployment_rate_3, method = "lasso.norm"))$Term_of_TI
+lasso_imputed_Job_Vacancies_1 = complete(mice(unemployment_rate_3, method = "lasso.norm"))$Job_Vacancies
+lasso_imputed_Estimated_Resident_Population_1 = complete(mice(unemployment_rate_3, method = "lasso.norm"))$Estimated_Resident_Population
+    
+lasso_imputed_values = data.frame(lasso_imputed_Percentage_change_GDP_1,
+              lasso_imputed_Percentage_change_GFCE_1,
+              lasso_imputed_Percentage_change_FCEAI_1,
+              lasso_imputed_Term_of_TI_1,
+              lasso_imputed_Job_Vacancies_1,
+              lasso_imputed_Estimated_Resident_Population_1)
+# View(lasso_imputed_values)
+
+# Checking the distribution of the data after imputation - CART
+
+p1_1_lasso =  ggplot(data = lasso_imputed_values, mapping = aes(lasso_imputed_Percentage_change_GDP_1)) + geom_histogram(bins = 40, colour = "blue") + ggtitle('Percentage_change_GDP - After Imputation using LASSO')
+
+p1_2_lasso =  ggplot(data = lasso_imputed_values, mapping = aes(lasso_imputed_Percentage_change_GFCE_1)) + geom_histogram(bins = 40, colour = "blue") + ggtitle('Percentage_change_GFCE - After Imputation using LASSO')
+
+p1_3_lasso =  ggplot(data = lasso_imputed_values, mapping = aes(lasso_imputed_Percentage_change_FCEAI_1)) + geom_histogram(bins = 40, colour = "blue") + ggtitle('Percentage_change_FCEAI - After Imputation using LASSO')
+
+p1_4_lasso = ggplot(data = lasso_imputed_values, mapping = aes(lasso_imputed_Term_of_TI_1)) + geom_histogram(bins = 40, colour = "blue") + ggtitle('Term_of_TI - After Imputation using LASSO')
+
+p1_5_lasso =  ggplot(data = lasso_imputed_values, mapping = aes(lasso_imputed_Job_Vacancies_1)) + geom_histogram(bins = 40, colour = "blue") + ggtitle('Job_Vacancies - After Imputation using LASSO')
+
+p1_6_lasso = ggplot(data = lasso_imputed_values, mapping = aes(lasso_imputed_Estimated_Resident_Population_1)) + geom_histogram(bins = 40, colour = "blue") + ggtitle('Estimated_Resident_Population - After Imputation using LASSO')
+
+gridExtra::grid.arrange(p1_1_lasso,p1_2_lasso,p1_3_lasso,p1_4_lasso,p1_5_lasso,p1_6_lasso, nrow = 3)
+
+########################################################################################
+cbind(pmm_imputed_values,cart_imputed_values)
+View(head(cbind(pmm_imputed_values,cart_imputed_values),5))
+```
+
+
+------------------------------------------------------------------------------
+
+#iii. ---Imputed Values Using Random Forrest
+
+```{r}
+
+# Compare the Distributions
+unemployment_rate_4 = unemployment_rate
+unemployment_rate_4 = unemployment_rate_4[,-c(10)]
+str(unemployment_rate_4)
+
+set.seed(99) # set seed to maintain model consistency
+# Impute missing values using PMM
+rf_imputed_Percentage_change_GDP_1 = missForest(unemployment_rate_4)$ximp$Percentage_change_GDP
+rf_imputed_Percentage_change_GFCE_1 = missForest(unemployment_rate_4)$ximp$Percentage_change_GFCE
+rf_imputed_Percentage_change_FCEAI_1 = missForest(unemployment_rate_4)$ximp$Percentage_change_FCEAI
+rf_imputed_Term_of_TI_1 = missForest(unemployment_rate_4)$ximp$Term_of_TI
+rf_imputed_Job_Vacancies_1 = missForest(unemployment_rate_4)$ximp$Job_Vacancies
+rf_imputed_Estimated_Resident_Population_1 = missForest(unemployment_rate_4)$ximp$Estimated_Resident_Population
+    
+rf_imputed_values = data.frame(rf_imputed_Percentage_change_GDP_1,
+              rf_imputed_Percentage_change_GFCE_1,
+              rf_imputed_Percentage_change_FCEAI_1,
+              rf_imputed_Term_of_TI_1,
+              rf_imputed_Job_Vacancies_1,
+              rf_imputed_Estimated_Resident_Population_1)
+# View(rf_imputed_values)
+
+
+#####################################
+
+p1_1_rf =  ggplot(data = rf_imputed_values, mapping = aes(rf_imputed_Percentage_change_GDP_1)) + geom_histogram(bins = 40, colour = "cyan") + ggtitle('Percentage_change_GDP - After Imputation using RF')
+
+p1_2_rf =  ggplot(data = rf_imputed_values, mapping = aes(rf_imputed_Percentage_change_GFCE_1)) + geom_histogram(bins = 40, colour = "cyan") + ggtitle('Percentage_change_GFCE - After Imputation using RF')
+
+p1_3_rf =  ggplot(data = rf_imputed_values, mapping = aes(rf_imputed_Percentage_change_FCEAI_1)) + geom_histogram(bins = 40, colour = "cyan") + ggtitle('Percentage_change_FCEAI - After Imputation using RF')
+
+p1_4_rf = ggplot(data = rf_imputed_values, mapping = aes(rf_imputed_Term_of_TI_1)) + geom_histogram(bins = 40, colour = "cyan") + ggtitle('Term_of_TI - After Imputation using RF')
+
+p1_5_rf =  ggplot(data = rf_imputed_values, mapping = aes(rf_imputed_Job_Vacancies_1)) + geom_histogram(bins = 40, colour = "cyan") + ggtitle('Job_Vacancies - After Imputation using RF')
+
+p1_6_rf = ggplot(data = rf_imputed_values, mapping = aes(rf_imputed_Estimated_Resident_Population_1)) + geom_histogram(bins = 40, colour = "cyan") + ggtitle('Estimated_Resident_Population - After Imputation using RF')
+
+gridExtra::grid.arrange(p1_1_rf,p1_2_rf,p1_3_rf,p1_4_rf,p1_5_rf,p1_6_rf, nrow = 3)
+
+# cbind(pmm_imputed_values[,c(1)],cart_imputed_values[,c(1)],lasso_imputed_values[,c(1)],rf_imputed_values[,c(1)])
+# View(cbind(pmm_imputed_values[,c(1)],cart_imputed_values[,c(1)],lasso_imputed_values[,c(1)],rf_imputed_values[,c(1)]))
+
+
+```
+
+# Histograms ( Distributions) after NA imputations
+
+```{r}
+###################
+#
+p1 = ggplot(data = unemployment_rate, mapping = aes(Percentage_change_GDP)) + geom_histogram(bins = 40, colour = "black") + ggtitle('Percentage_change_GDP - Before Imputation') # Original 
+
+p1_1_pmm =  ggplot(data = pmm_imputed_values, mapping = aes(pmm_imputed_Percentage_change_GDP_1)) + geom_histogram(bins = 40, colour = "green") + ggtitle('Percentage_change_GDP - After Imputation using PMM')
+
+p1_1_cart =  ggplot(data = cart_imputed_values, mapping = aes(cart_imputed_Percentage_change_GDP_1)) + geom_histogram(bins = 40, colour = "yellow") + ggtitle('Percentage_change_GDP - After Imputation using CART')
+
+p1_1_lasso =  ggplot(data = lasso_imputed_values, mapping = aes(lasso_imputed_Percentage_change_GDP_1)) + geom_histogram(bins = 40, colour = "blue") + ggtitle('Percentage_change_GDP - After Imputation using LASSO')
+gridExtra::grid.arrange(p1_1_pmm,p1_1_cart,p1_1_lasso,nrow = 1)
+
+p1_1_rf =  ggplot(data = rf_imputed_values, mapping = aes(rf_imputed_Percentage_change_GDP_1)) + geom_histogram(bins = 40, colour = "blue") + ggtitle('Percentage_change_GDP - After Imputation using RF')
+gridExtra::grid.arrange(p1,p1_1_pmm,p1_1_cart,p1_1_lasso,p1_1_rf,nrow = 3)
+
+cbind(pmm_imputed_values[,c(1)],cart_imputed_values[,c(1)],lasso_imputed_values[,c(1)],rf_imputed_values[,c(1)])
+View(cbind(pmm_imputed_values[,c(1)],cart_imputed_values[,c(1)],lasso_imputed_values[,c(1)],rf_imputed_values[,c(1)]))
+```
+
+------------------------------------------------------------------------------
+# Restructure the Data
+```{r}
+# pmm_imputed_values
+# cart_imputed_values
+# lasso_imputed_values
+rf_imputed_values
+
+# Add these values to the original data set
+str(unemployment_rate)
+ur_au = cbind(unemployment_rate,rf_imputed_values) # Combine the 2 data frames
+str(ur_au)
+
+# Filter the original columns which have missing values
+#str(ur_au[,-c(2,3,4,5,7,8)])
+ur_au= ur_au[,-c(2,3,4,5,7,8)]
+str(ur_au)
+
+# Rename the columns 
+new_column_names_2 = c("Percentage_change_GDP","Percentage_change_GFCE","Percentage_change_FCEAI","Term_of_TI","Job_Vacancies","Estimated_Resident_Population") # Set New Column Names
+
+# Rename the old column names to new column names
+ur_au = ur_au %>% rename(Percentage_change_GDP = "rf_imputed_Percentage_change_GDP_1",
+                   Percentage_change_GFCE = "rf_imputed_Percentage_change_GFCE_1",
+                   Percentage_change_FCEAI = "rf_imputed_Percentage_change_FCEAI_1",
+                   Term_of_TI = "rf_imputed_Term_of_TI_1",
+                   Job_Vacancies = "rf_imputed_Job_Vacancies_1",
+                   Estimated_Resident_Population = "rf_imputed_Estimated_Resident_Population_1")
+# Renamed column names 
+ur_au_rearranged = ur_au[,c("Unemployment_Rate",
+                            "Year",
+                            "Month",
+                            "Quarter",
+                            "Percentage_change_GDP",
+                            "Percentage_change_GFCE",
+                            "Percentage_change_FCEAI",
+                            "Term_of_TI",
+                            "Consumer_Price_Index",
+                            "Job_Vacancies",
+                            "Estimated_Resident_Population")]
+
+# str(ur_au_rearranged)
+
+unemployment_rate = ur_au_rearranged  # assign the rearranged columns to the original data
+#unemployment_rate = ur_au_rearranged[,-c(2,3,4)] # Remove Year, Month and Quarter since it's not a part of the original predictors
+#str(unemployment_rate)
+
+which(is.na(unemployment_rate))  # Check for missing values
+colSums(is.na(unemployment_rate))  # Count the number of missing values per column
+
+
+```
+Original DS:                                                                                                                
+> str(unemployment_rate)
+'data.frame':	166 obs. of  9 variables:
+ $ Year_Month                   : chr  "1982_Dec" "1982_Jun" "1982_Mar" "1982_Sep" ...
+ $ Unemployment_Rate            : num  8.79 6.57 6.21 7.11 9.71 ...
+ $ Percentage_change_GDP        : num  -1.9 0.5 -1.2 -1 1.4 -0.5 -1.3 2.5 0.3 0.8 ...
+ $ Percentage_change_GFCE       : num  5.3 7.9 -3.2 -5.9 5.5 2.1 4.8 -4.9 -11.4 3.7 ...
+ $ Percentage_change_FCEAI      : num  1.7 3.4 -0.1 -1.3 0.5 -0.6 0.7 0.6 -0.5 -0.2 ...
+ $ Term_of_TI                   : num  -1 2.5 -2.9 -0.5 1.3 1.2 0.5 -0.2 -0.3 0.5 ...
+ $ Consumer_Price_Index         : num  33.6 31.5 30.8 32.6 36.5 35 34.3 35.6 37.4 36.4 ...
+ $ Job_Vacancies                : num  28.6 31.2 36.4 28.4 37.6 31.7 30.3 34.3 52.3 43.5 ...
+ $ Estimated_Resident_Population: num  15289 15184 15122 15239 15484 ...
+
+After Transformation:
+> str(unemployment_rate)
+'data.frame':	166 obs. of  11 variables:
+ $ Unemployment_Rate            : num  8.79 6.57 6.21 7.11 9.71 ...
+ $ Year                         : num  1982 1982 1982 1982 1983 ...
+ $ Month                        : chr  "Dec" "Jun" "Mar" "Sep" ...
+ $ Quarter                      : num  4 2 1 3 4 2 1 3 4 2 ...
+ $ Percentage_change_GDP        : num  -1.9 0.5 -1.2 -1 1.4 -0.5 -1.3 2.5 0.3 0.8 ...
+ $ Percentage_change_GFCE       : num  5.3 7.9 -3.2 -5.9 5.5 2.1 4.8 -4.9 -11.4 3.7 ...
+ $ Percentage_change_FCEAI      : num  1.7 3.4 -0.1 -1.3 0.5 -0.6 0.7 0.6 -0.5 -0.2 ...
+ $ Term_of_TI                   : num  -1 2.5 -2.9 -0.5 1.3 1.2 0.5 -0.2 -0.3 0.5 ...
+ $ Consumer_Price_Index         : num  33.6 31.5 30.8 32.6 36.5 35 34.3 35.6 37.4 36.4 ...
+ $ Job_Vacancies                : num  28.6 31.2 36.4 28.4 37.6 31.7 30.3 34.3 52.3 43.5 ...
+ $ Estimated_Resident_Population: num  15289 15184 15122 15239 15484 ..
+
+
+# Further EDA
+- Correlation Plots
+- Outlier Analysis
+```{r}
+
+# Numerical Variable Analysis
+
+# 1. Using Pair Plot
+#psych::pairs.panels(unemployment_rate[,-c(3)], main = "Unemployment Rate  - Pair Plot Analysis")
+psych::pairs.panels(unemployment_rate, main = "Unemployment Rate  - Pair Plot Analysis")
+
+# 2. Using Correlation Plot
+unemployment_rate_cor = cor(unemployment_rate[,-c(3)])
+#unemployment_rate_cor = cor(unemployment_rate)
+corrplot::corrplot(unemployment_rate_cor, method = "number",title = "Correlation Plot - Numerical Variables")
+
+# Scatter Plot Analysis - Predictors vs Response
+
+# ------------------------------------------------------------------------------------------#
+# 1. Year vs Unemployment Rate
+sc_1 = ggplot(data = unemployment_rate, aes(x = Year, y = Unemployment_Rate)) +
+  geom_point(color = "red") +
+  labs(x = "Year", y = "Unemployment Rate") +
+  ggtitle("Scatter Plot Analysis - Year vs Unemployment_Rate")
+
+
+# sc_l_line = ggplot(data = unemployment_rate, aes(x = Year, y = Unemployment_Rate)) +
+#   geom_smooth(method = "auto", color = "blue") +  # Add a smoothed line
+#   labs(x = "Year", y = "Unemployment Rate") +
+#   ggtitle("Scatter Plot Analysis - Year vs Unemployment_Rate")
+
+# ------------------------------------------------------------------------------------------#
+# 2. Percentage_change_GDP vs Unemployment Rate
+sc_2 = ggplot(data = unemployment_rate, aes(x = Percentage_change_GDP , y = Unemployment_Rate)) +
+  geom_point(color = "green") +
+  labs(x = "Percentage_change_GDP", y = "Unemployment Rate") +
+  ggtitle("Scatter Plot Analysis - % change in Gross Domestic Product vs Unemployment_Rate")
+
+# ------------------------------------------------------------------------------------------#
+# 3. Percentage_change_GFCE vs Unemployment Rate
+sc_3 = ggplot(data = unemployment_rate, aes(x = Percentage_change_GFCE , y = Unemployment_Rate)) +
+  geom_point(color = "blue") +
+  labs(x = "Percentage_change_GFCE", y = "Unemployment Rate") +
+  ggtitle("Scatter Plot Analysis - % change in  Government final consumption expenditure vs Unemployment_Rate")
+
+# ------------------------------------------------------------------------------------------#
+# 4. Percentage_change_FCEAI vs Unemployment Rate
+sc_4 = ggplot(data = unemployment_rate, aes(x = Percentage_change_FCEAI , y = Unemployment_Rate)) +
+  geom_point(color = "purple") +
+  labs(x = "Percentage_change_FCEAI", y = "Unemployment Rate") +
+  ggtitle("Scatter Plot Analysis - % change in  final consumption expenditure of all industry sectors vs Unemployment_Rate")
+
+# ------------------------------------------------------------------------------------------#
+# 5. Term_of_TI vs Unemployment Rate
+sc_5 = ggplot(data = unemployment_rate, aes(x = Term_of_TI , y = Unemployment_Rate)) +
+  geom_point(color = "orange") +
+  labs(x = " Term of trade index", y = "Unemployment Rate") +
+  ggtitle("Scatter Plot Analysis - Term_of_TI vs Unemployment_Rate")
+
+# ------------------------------------------------------------------------------------------#
+# 6. Consumer_Price_Index vs Unemployment Rate
+sc_6 = ggplot(data = unemployment_rate, aes(x = Consumer_Price_Index , y = Unemployment_Rate)) +
+  geom_point(color = "magenta") +
+  labs(x = "Consumer_Price_Index", y = "Unemployment Rate") +
+  ggtitle("Scatter Plot Analysis - Consumer Price Index of all groups vs Unemployment_Rate")
+
+# ------------------------------------------------------------------------------------------#
+# 7. Job_Vacancies vs Unemployment Rate
+sc_7 = ggplot(data = unemployment_rate, aes(x = Job_Vacancies , y = Unemployment_Rate)) +
+  geom_point(color = "navy") +
+  labs(x = "Job_Vacancies", y = "Unemployment Rate") +
+  ggtitle("Scatter Plot Analysis - Job Vacancies vs Unemployment_Rate")
+
+# ------------------------------------------------------------------------------------------#
+# 8. Estimated_Resident_Population vs Unemployment Rate
+sc_8 = ggplot(data = unemployment_rate, aes(x = Estimated_Resident_Population , y = Unemployment_Rate)) +
+  geom_point(color = "turquoise") +
+  labs(x = "Estimated_Resident_Population", y = "Unemployment Rate") +
+  ggtitle("Scatter Plot Analysis - Resident Population (in Thousands) vs Unemployment_Rate")
+
+
+gridExtra::grid.arrange(sc_1, sc_2, sc_3, sc_4 , sc_5 , sc_6, sc_7 , sc_8, nrow = 2)
+```
+
+# Smoothened Line Plots
+```{r}
+# 1. Year vs Unemployment Rate
+sc_1 = ggplot(data = unemployment_rate, aes(x = Year, y = Unemployment_Rate)) +
+  geom_point(color = "red") +
+  labs(x = "Year", y = "Unemployment Rate") +
+  ggtitle("Scatter Plot Analysis - Year vs Unemployment_Rate")
+
+sc_l_line = ggplot(data = unemployment_rate, aes(x = Year, y = Unemployment_Rate)) +
+  geom_smooth(method = "auto", color = "blue") +  # Add a smoothed line
+  labs(x = "Year", y = "Unemployment Rate") +
+  ggtitle("Scatter Plot Analysis - Year vs Unemployment_Rate")
+gridExtra::grid.arrange(sc_1, sc_l_line, nrow = 2)
+
+# MAX
+(max_value = max(unemployment_rate$Unemployment_Rate)) # To determine Peak Unemployment Rate # 11.14877
+(year_at_max = unemployment_rate$Year[which(unemployment_rate$Unemployment_Rate == max_value)]) # To determine Year # 1992
+
+# MIN
+(min_value = min(unemployment_rate$Unemployment_Rate)) # To determine Peak Unemployment Rate # 3.472797
+(year_at_min = unemployment_rate$Year[which(unemployment_rate$Unemployment_Rate == min_value)]) # To determine Year # 2022
+
+
+# Eyeball test: Check the unemployment rate between 2006 and 2010
+(check_2006_2010 = unemployment_rate[unemployment_rate$Year >= 2006 & unemployment_rate$Year <= 2010, ])
+(min_unemployment_rate = min(check_2006_2010$Unemployment_Rate)) # 4.086032  # Find the minimum unemployment rate in the filtered data
+(year_at_min_2 = check_2006_2010$Year[which(check_2006_2010$Unemployment_Rate == min_unemployment_rate)]) # to check the exact year  # 2008
+
+gridExtra::grid.arrange(sc_1, sc_l_line, nrow = 2)
+---------------------------------
+# SMOOTH - LINE PLOTS
+
+# 1. Year vs Unemployment Rate
+sl_1 = ggplot(data = unemployment_rate, aes(x = Year, y = Unemployment_Rate)) +
+  labs(x = "Year", y = "Unemployment Rate") +
+  ggtitle("Scatter Plot Analysis - Year vs Unemployment_Rate") +
+  geom_smooth(method = "auto", color = "blue")  # Add a smoothed line
+
+# 2. Percentage_change_GDP vs Unemployment Rate
+sl_2 = ggplot(data = unemployment_rate, aes(x = Percentage_change_GDP , y = Unemployment_Rate)) +
+  labs(x = "Percentage_change_GDP", y = "Unemployment Rate") +
+  ggtitle("Scatter Plot Analysis - % change in Gross Domestic Product vs Unemployment_Rate") +
+  geom_smooth(method = "auto", color = "green")  # Add a smoothed line
+
+# 3. Percentage_change_GFCE vs Unemployment Rate
+sl_3 = ggplot(data = unemployment_rate, aes(x = Percentage_change_GFCE , y = Unemployment_Rate)) +
+  labs(x = "Percentage_change_GFCE", y = "Unemployment Rate") +
+  ggtitle("Scatter Plot Analysis - % change in  Government final consumption expenditure vs Unemployment_Rate") +
+  geom_smooth(method = "auto", color = "blue")  # Add a smoothed line
+
+# 4. Percentage_change_FCEAI vs Unemployment Rate
+sl_4 = ggplot(data = unemployment_rate, aes(x = Percentage_change_FCEAI , y = Unemployment_Rate)) +
+  labs(x = "Percentage_change_FCEAI", y = "Unemployment Rate") +
+  ggtitle("Scatter Plot Analysis - % change in  final consumption expenditure of all industry sectors vs Unemployment_Rate") +
+  geom_smooth(method = "auto", color = "purple")  # Add a smoothed line
+
+# gridExtra::grid.arrange(sl_1, sl_2, sl_3,sl_4, nrow = 2)
+
+# 5. Term_of_TI vs Unemployment Rate
+sl_5 = ggplot(data = unemployment_rate, aes(x = Term_of_TI , y = Unemployment_Rate)) +
+  labs(x = " Term of trade index", y = "Unemployment Rate") +
+  ggtitle("Scatter Plot Analysis - Term_of_TI vs Unemployment_Rate") +
+  geom_smooth(method = "auto", color = "orange")  # Add a smoothed line
+
+# 6. Consumer_Price_Index vs Unemployment Rate
+sl_6 = ggplot(data = unemployment_rate, aes(x = Consumer_Price_Index , y = Unemployment_Rate)) +
+  labs(x = "Consumer_Price_Index", y = "Unemployment Rate") +
+  ggtitle("Scatter Plot Analysis - Consumer Price Index of all groups vs Unemployment_Rate") +
+  geom_smooth(method = "auto", color = "magenta")  # Add a smoothed line
+
+# 7. Job_Vacancies vs Unemployment Rate
+sl_7 = ggplot(data = unemployment_rate, aes(x = Job_Vacancies , y = Unemployment_Rate)) +
+  labs(x = "Job_Vacancies", y = "Unemployment Rate") +
+  ggtitle("Scatter Plot Analysis - Job Vacancies vs Unemployment_Rate") +
+  geom_smooth(method = "auto", color = "navy")  # Add a smoothed line
+
+# 8. Estimated_Resident_Population vs Unemployment Rate
+sl_8 = ggplot(data = unemployment_rate, aes(x = Estimated_Resident_Population , y = Unemployment_Rate)) +
+  labs(x = "Estimated_Resident_Population", y = "Unemployment Rate") +
+  ggtitle("Scatter Plot Analysis - Resident Population (in Thousands) vs Unemployment_Rate") +
+  geom_smooth(method = "auto", color = "turquoise")  # Add a smoothed line
+
+gridExtra::grid.arrange(sl_1, sl_2, sl_3,sl_4,sl_5, sl_6,sl_7,sl_8 ,nrow = 2)
+
+```
+
+
+# Descriptive Statistics& Box Plots
+```{r}
+summary(unemployment_rate$Year)
+summary(unemployment_rate$Unemployment_Rate)
+summary(unemployment_rate$Percentage_change_GDP)
+summary(unemployment_rate$Percentage_change_GFCE)
+summary(unemployment_rate$Percentage_change_FCEAI)
+summary(unemployment_rate$Term_of_TI)
+summary(unemployment_rate$Consumer_Price_Index)
+summary(unemployment_rate$Job_Vacancies)
+summary(unemployment_rate$Estimated_Resident_Population)
+
+# Boxplot for Unemployment Rate
+gg_1 = ggplot(unemployment_rate, aes(y = Unemployment_Rate)) +
+  geom_boxplot(fill = "blue", color = "black") +
+  labs(title = "Boxplot of Unemployment Rate", y = "Unemployment Rate")
+
+# Boxplot for Percentage Change in GDP
+gg_2 = ggplot(unemployment_rate, aes(y = Percentage_change_GDP)) +
+  geom_boxplot(fill = "green", color = "black") +
+  labs(title = "Boxplot of Percentage Change in GDP", y = "Percentage Change in GDP")
+
+# Boxplot for Percentage Change in GFCE
+gg_3 = ggplot(unemployment_rate, aes(y = Percentage_change_GFCE)) +
+  geom_boxplot(fill = "orange", color = "black") +
+  labs(title = "Boxplot of Percentage Change in GFCE", y = "Percentage Change in GFCE")
+
+# Boxplot for Percentage Change in FCEAI
+gg_4 = ggplot(unemployment_rate, aes(y = Percentage_change_FCEAI)) +
+  geom_boxplot(fill = "purple", color = "black") +
+  labs(title = "Boxplot of Percentage Change in FCEAI", y = "Percentage Change in FCEAI")
+
+# gridExtra::grid.arrange(gg_1, gg_2, gg_3, gg_4 , nrow = 2)
+
+# Boxplot for Consumer Price Index
+gg_5 = ggplot(unemployment_rate, aes(y = Term_of_TI)) +
+  geom_boxplot(fill = "red", color = "black") +
+  labs(title = "Boxplot of Consumer Price Index", y = "Consumer Price Index")
+
+# Boxplot for Consumer Price Index
+gg_6 = ggplot(unemployment_rate, aes(y = Consumer_Price_Index)) +
+  geom_boxplot(fill = "orange", color = "black") +
+  labs(title = "Boxplot of Consumer Price Index", y = "Consumer Price Index")
+
+# Boxplot for Job Vacancies
+gg_7= ggplot(unemployment_rate, aes(y = Job_Vacancies)) +
+  geom_boxplot(fill = "brown", color = "black") +
+  labs(title = "Boxplot of Job Vacancies", y = "Job Vacancies")
+
+# Boxplot for Estimated Resident Population
+gg_8 = ggplot(unemployment_rate, aes(y = Estimated_Resident_Population)) +
+  geom_boxplot(fill = "pink", color = "black") +
+  labs(title = "Boxplot of Estimated Resident Population", y = "Estimated Resident Population")
+
+gridExtra::grid.arrange(gg_1, gg_2, gg_3, gg_4 ,gg_5, gg_6, gg_7,gg_8, nrow = 2)
+
+```
+
+> summary(unemployment_rate$Unemployment_Rate)
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+  3.473   5.279   6.187   6.714   8.172  11.149 
+> summary(unemployment_rate$Percentage_change_GDP)
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+-6.8000  0.0000  0.4000  0.4007  0.7750  3.8000 
+> summary(unemployment_rate$Percentage_change_GFCE)
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+-11.400  -0.100   1.400   1.175   2.600  14.900 
+> summary(unemployment_rate$Percentage_change_FCEAI)
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+-8.2000  0.4000  0.7500  0.7854  1.2000  6.0000 
+> summary(unemployment_rate$Term_of_TI)
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+-9.7000 -1.0750  0.4000  0.5032  2.0750 11.3000 
+> summary(unemployment_rate$Consumer_Price_Index)
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+  30.80   59.90   77.35   79.19  102.30  133.70 
+> summary(unemployment_rate$Job_Vacancies)
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+  28.40   70.85  108.05  133.52  174.20  454.20 
+> summary(unemployment_rate$Estimated_Resident_Population)
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+  15122   17490   19577   20173   23014   26268 
+  
+# ----------------------------------------------------------------------------------------------
+# Data Partioning
+```{r}
+# Data Partitioning 
+set.seed(99) # Set the seed for model consistency 
+
+# Training Data = Dec 1982 to Dec 2020
+ur_training_filter = (unemployment_rate$Year < 2021) | (unemployment_rate$Year == 2020 & unemployment_rate$Month == "Dec")
+
+# Test Data = Jan 2021 to March 2023 
+ur_test_filter = (unemployment_rate$Year >= 2021) | (unemployment_rate$Year == 2021 & unemployment_rate$Month %in% c("Mar"))
+
+# Create the training and test sets
+ur_train = unemployment_rate[ur_training_filter, ]
+ur_test = unemployment_rate[ur_test_filter, ]
+
+dim(ur_train)  #  156 x  11
+dim(ur_test)  #  10 x 11
+
+ur_train = ur_train[,-c(2,3,4)] # Remove Year, Month and Quarter since it's not a part of the original predictors
+ur_test = ur_test[,-c(2,3,4)] # Remove Year, Month and Quarter since it's not a part of the original predictors
+
+#View(ur_train)
+#View(ur_test)
+
+dim(ur_train)  #  156 x 8
+dim(ur_test)  #  10 x 8
+```
+
+# ---------------------------------------------- ML MODELS --------------------------------------------------------
+
+
+# ---------------------------------------------- SHRINKAGE METHODS --------------------------------------------------------
+
+# 1. RIDGE REGRESSION
+```{r}
+
+# Build a matrix of Predictors
+x = model.matrix(Unemployment_Rate ~ . , data = ur_train)[,-1] # remove the response variable
+y = ur_train$Unemployment_Rate  # response variable
+
+# Build the Ridge Regression Model on Training Data
+set.seed(99)
+ridge_ur = glmnet(x,y, family = 'gaussian', aplha = 0)
+ridge_ur
+summary(ridge_ur) # Summary of the model
+plot(ridge_ur) # Plot the model
+
+# ------------------------------- CROSS VALIDATION using a grid of Lambda values------------------------# 
+
+# Set the lambda values
+grid = 10^seq(10, -2 , length = 100)
+ 
+# Applying Cross-validation
+start_time_1 = Sys.time()  # Start the timer
+
+set.seed(99)
+
+ridge_model_cv = cv.glmnet(x,y, alpha = 0, family = 'gaussian', lambda = grid, scale = TRUE) # Build the 10 - fold CV Model on training data
+
+end_time_1 = Sys.time()  # End the timer 
+(time_diff_1 = end_time_1 - start_time_1) # Time Difference = 0.109123 secs
+
+
+ridge_model_cv  # Model Results 
+summary(ridge_model_cv) # Model Summary
+
+# Plot the model for the CV_Lasso
+plot(ridge_model_cv, xvar = "lambda", main = "Ridge CV using a grid of Lambda Values") 
+
+# Comments:
+# The plot displays the Mean-Squared Error (MSE) according to the log of lambda. The left dashed vertical line indicates that the log of the optimal value of lambda is approximately -2, which is the one that minimizes the prediction error. This lambda value will give the most accurate model. The exact value of lambda can be viewed as follow:
+
+# Minimal Lambda
+(best_lambda_ridge = ridge_model_cv$lambda.min)# Minimum Lambda = 0.01
+
+log10(0.01) # -2  # Comments: Which confirms the value displayed on the graph.
+
+
+#Coefficients : Using the lambda.min on 10-fold CV
+coef(ridge_model_cv, ridge_model_cv$lambda.min)
+```
+> coef(ridge_model_cv, ridge_model_cv$lambda.min)
+8 x 1 sparse Matrix of class "dgCMatrix"
+                                         s1
+(Intercept)                    1.0195451130
+Percentage_change_GDP          0.4224458498
+Percentage_change_GFCE         0.0669639897
+Percentage_change_FCEAI       -0.3155397703
+Term_of_TI                    -0.0213959833
+Consumer_Price_Index          -0.0599233820
+Job_Vacancies                 -0.0356059158
+Estimated_Resident_Population  0.0007361817
+
+
+# ----------------------------------------X---------------------------------------------------------------# 
+# Build the Ridge Model using the Best Lambda Value (0.01)
+```{r}
+
+start_time_2 = Sys.time()  # Start the timer
+set.seed(99)
+ridge_best_model = glmnet(x, y, alpha = 0, lambda = best_lambda_ridge, scale = TRUE) # Build the model using the Best Lambda value
+
+end_time_2 = Sys.time()  # End the timer 
+(time_diff_2 = end_time_2 - start_time_2) # Time Difference = 0.005417109  secs
+
+ridge_best_model # Model results
+summary(ridge_best_model) # Model summary
+
+ridge_best_model$lambda  # 0.01
+
+coef(ridge_best_model)  # Print the Coefficients
+
+
+# ------------------------------ PERFORMANCE ON TRAINING DATA  ------------------------------------#
+# Prediction on Training Data using Best (Minimum Lambda)
+ridge_train_predict = predict(ridge_best_model, s = ridge_best_model$lambda, newx = x)
+
+# Mean Squared Error for Training Data
+(mse_ridge_train = mean((ridge_train_predict - y)^2))
+
+# Root Mean Squared Error for Training Data
+(rmse_ridge_train = sqrt(mse_ridge_train))
+
+# Report Training Performance Metrics
+cat("Training Performance Metrics:\n")
+cat("MSE on Training Data: ", mse_ridge_train, "\n")  # 0.8782203
+cat("RMSE on Training Data: ", rmse_ridge_train, "\n") # 0.9371341 
+
+# ------------------------------ PERFORMANCE ON TEST DATA  ------------------------------------#
+# Prediction on Test Data using Best (Minimum Lambda)
+x_test = model.matrix(Unemployment_Rate ~ ., data = ur_test)[, -1]
+
+ridge_test_predict = predict(ridge_best_model, newx = x_test)  # Predictions on the Test Data
+
+# Mean Squared Error for Test Data
+(mse_ridge_test = mean((ridge_test_predict - ur_test$Unemployment_Rate)^2))
+
+# Root Mean Squared Error for Test Data
+(rmse_ridge_test = sqrt(mse_ridge_test))
+
+# Report Test Performance Metrics
+cat("\nTest Performance Metrics:\n")
+cat("MSE on Test Data: ", mse_ridge_test, "\n") # 37.40976 
+cat("RMSE on Test Data: ", rmse_ridge_test, "\n") # 6.116352 
+
+```
+> ridge_best_model
+
+Call:  glmnet(x = x, y = y, alpha = 0, lambda = best_lambda_ridge, scale = TRUE) 
+
+  Df %Dev Lambda
+1  7 72.5   0.01
+
+> coef(ridge_best_model) # Print the Coeffecients
+8 x 1 sparse Matrix of class "dgCMatrix"
+                                         s0
+(Intercept)                    1.0193081079
+Percentage_change_GDP          0.4224455357
+Percentage_change_GFCE         0.0669633879
+Percentage_change_FCEAI       -0.3155382155
+Term_of_TI                    -0.0213952666
+Consumer_Price_Index          -0.0599256065
+Job_Vacancies                 -0.0356061558
+Estimated_Resident_Population  0.0007362036
+
+> # Report Training Performance Metrics
+> cat("Training Performance Metrics:\n")
+Training Performance Metrics:
+> cat("MSE on Training Data: ", mse_ridge_train, "\n")  # 0.8782203
+MSE on Training Data:  0.8782203 
+> cat("RMSE on Training Data: ", rmse_ridge_train, "\n") # 0.9371341 
+RMSE on Training Data:  0.9371341 
+> # Report Test Performance Metrics
+> cat("\nTest Performance Metrics:\n")
+
+Test Performance Metrics:
+> cat("MSE on Test Data: ", mse_ridge_test, "\n") # 37.40976 
+MSE on Test Data:  37.40976 
+> cat("RMSE on Test Data: ", rmse_ridge_test, "\n") # 6.116352 
+RMSE on Test Data:  6.116352 
+
+# ------------------------------------------------ LASSO REGRESSION ------------------------------------------------------#
+# 2. LASSO REGRESSION
+
+```{r}
+# Build a matrix of Predictors
+x = model.matrix(Unemployment_Rate ~ . , data = ur_train)[,-1] # remove the response variable
+y = ur_train$Unemployment_Rate # Response Variable
+
+
+# Build the Lasso Regression Model on Training Data
+lasso_ur = glmnet(x,y, family = 'gaussian', aplha = 1)
+lasso_ur
+summary(lasso_ur) # Summary of the model
+plot(lasso_ur) # Plot the model
+
+# ------------------------------- CROSS VALIDATION using a grid of Lambda values------------------------# 
+# Set the lambda values
+grid = 10^seq(10, -2 , length = 100)
+
+# Applying Cross-validation
+start_time_3 = Sys.time()  # Start the timer
+
+set.seed(99)  # Set seed for model consistency
+lasso_model_cv = cv.glmnet(x,y, alpha = 1, family = 'gaussian', lambda = grid, scale = TRUE) # Build the model using the training data
+
+end_time_3 = Sys.time()  # End the timer 
+(time_diff_3 = end_time_3 - start_time_3)  # Time difference of 0.1514041 secs
+
+lasso_model_cv # Model results
+summary(lasso_model_cv) # Model summary
+
+# Plot the model for the CV_Lasso
+plot(lasso_model_cv, main = "Lasso CV using a grid of Lambda Values") 
+
+# Comments:
+# The plot displays the Mean-Squared Error (MSE) according to the log of lambda. The left dashed vertical line indicates that the log of the optimal value of lambda is approximately -2, which is the one that minimizes the prediction error. This lambda value will give the most accurate model. The exact value of lambda can be viewed as follow:
+
+# Minimal Lambda
+(best_lambda_lasso = lasso_model_cv$lambda.min)# Minimum Lambda = 0.01
+
+log10(0.01) # -2  # Comments: Which confirms the value displayed on the graph.
+
+
+#Coefficients : Using the lambda.min on 10-fold CV
+coef(lasso_model_cv, lasso_model_cv$lambda.min)
+```
+> #Coefficients : Using the lambda.min on 10-fold CV
+> coef(lasso_model_cv, lasso_model_cv$lambda.min)
+8 x 1 sparse Matrix of class "dgCMatrix"
+                                         s1
+(Intercept)                    0.4939532205
+Percentage_change_GDP          0.3910860932
+Percentage_change_GFCE         0.0577757850
+Percentage_change_FCEAI       -0.2808455828
+Term_of_TI                    -0.0157995655
+Consumer_Price_Index          -0.0635513561
+Job_Vacancies                 -0.0364967755
+Estimated_Resident_Population  0.0007816274
+
+# Build the Lasso Model using the Best Lambda Value (0.01)
+```{r}
+start_time_4 = Sys.time()  # Start the timer
+
+set.seed(99)
+lasso_best_model = glmnet(x,y, alpha = 1, lambda = best_lambda_lasso,scale = TRUE)
+
+end_time_4 = Sys.time()  # End the timer 
+(time_diff_4 = end_time_4 - start_time_4) # Time difference of 0.005409002 secs
+
+
+lasso_best_model # Model results
+lasso_best_model$lambda  # 0.01
+
+coef(lasso_best_model) # Print the Coeffecients
+
+#c = coef(lasso_best_model) # Print the Coeffecients
+# ------------------------------ PERFORMANCE ON TRAINING DATA  ------------------------------------#
+# Prediction on Training Data using Best (Minimum Lambda)
+lasso_train_predict = predict(lasso_best_model, s = lasso_best_model$lambda, newx = x)
+
+# Mean Squared Error for Training Data
+(mse_lasso_train = mean((lasso_train_predict - y)^2))
+
+# Root Mean Squared Error for Training Data
+(rmse_lasso_train = sqrt(mse_lasso_train))
+
+# Report Training Performance Metrics
+cat("Training Performance Metrics:\n")
+cat("MSE on Training Data: ", mse_lasso_train, "\n")  # 0.8782203
+cat("RMSE on Training Data: ", rmse_lasso_train, "\n") # 0.9371341 
+
+# ------------------------------ PERFORMANCE ON TEST DATA  ------------------------------------#
+
+# Prediction on Test Data using Best (Minimum Lambda)
+x_test = model.matrix(Unemployment_Rate ~ ., data = ur_test)[, -1]
+
+lasso_test_predict = predict(lasso_best_model, newx = x_test)  # Predictions on the Test Data
+
+# Mean Squared Error for Test Data
+(mse_lasso_test = mean((lasso_test_predict - ur_test$Unemployment_Rate)^2))
+
+# Root Mean Squared Error for Test Data
+(rmse_lasso_test = sqrt(mse_lasso_test))
+
+# Report Test Performance Metrics
+cat("\nTest Performance Metrics:\n")
+cat("MSE on Test Data: ", mse_lasso_test, "\n") 
+cat("RMSE on Test Data: ", rmse_lasso_test, "\n") 
+
+```
+> lasso_best_model
+
+Call:  glmnet(x = x, y = y, alpha = 1, lambda = best_lambda_lasso) 
+
+  Df  %Dev Lambda
+1  7 72.65   0.01
+
+# Beta Values
+> coef(lasso_best_model) # Print the Coeffecients
+8 x 1 sparse Matrix of class "dgCMatrix"
+                                        s0
+(Intercept)                    0.493861056
+Percentage_change_GDP          0.391090780
+Percentage_change_GFCE         0.057777988
+Percentage_change_FCEAI       -0.280843523
+Term_of_TI                    -0.015800676
+Consumer_Price_Index          -0.063553110
+Job_Vacancies                 -0.036496531
+Estimated_Resident_Population  0.000781637
+
+> # Report Training Performance Metrics
+> cat("Training Performance Metrics:\n")
+Training Performance Metrics:
+> cat("MSE on Training Data: ", mse_lasso_train, "\n")  # 0.8782203
+MSE on Training Data:  0.8734861 
+> cat("RMSE on Training Data: ", rmse_lasso_train, "\n") # 0.9371341 
+RMSE on Training Data:  0.9346048 
+> # Report Test Performance Metrics
+> cat("\nTest Performance Metrics:\n")
+
+Test Performance Metrics:
+> cat("MSE on Test Data: ", mse_lasso_test, "\n") 
+MSE on Test Data:  39.24328 
+> cat("RMSE on Test Data: ", rmse_lasso_test, "\n") 
+RMSE on Test Data:  6.264446 
+
+# ---------------------------------------------------x------------------------------------------------------#
+
+# -------------------------------------# II. Tree Based Models----------------------------------------------#
+
+
+# Fit CART Regression Tree to the Data
+```{r}
+start_time_5 = Sys.time()  # Start the timer
+
+set.seed(99) # Set seed for model consistency
+tree_ur = rpart(Unemployment_Rate ~. , data = ur_train) # Build the CART model on training data 
+
+end_time_5 = Sys.time()  # End the timer 
+(time_diff_5 = end_time_5 - start_time_5) # Time difference of 0.08120894 secs
+
+summary(tree_ur) # Model summary
+
+# Plot the model
+par(xpd = TRUE)
+rattle::fancyRpartPlot(tree_ur, main = "Basic CART") # using rattle
+
+# Bar Plot to see variable importance
+barplot(tree_ur$variable.importance, cex.names  = 0.8, las = 2, , col = "red") 
+
+# Predictions on test dat
+#help("predict.rpart")
+tree_ur_predict = predict(tree_ur , ur_test)
+
+# Plot the graph
+#plot(tree_ur_predict, ur_test$Unemployment_Rate)
+
+# Mean Squared Error
+mean((tree_ur_predict - ur_test$Unemployment_Rate)^2)  # 2.950931
+
+# Plot the Complexity Parameter
+par(mfrow = c(1,1))
+plotcp(tree_ur, main = "CART - Complexity Parameter")  # cp = 0.021
+
+# --------------------------------------------USING CV = 10 ------------------------------------------------------------#
+start_time_5 = Sys.time()  # Start the timer
+
+cv_tree_ur = rpart(Unemployment_Rate ~. , data = ur_train, xval = 10, model = TRUE) # Build the model using 10-FOld CV on training data
+
+end_time_5 = Sys.time()  # End the timer 
+(time_diff_5 = end_time_5 - start_time_5) # Time difference of 0.008260965 secs
+
+summary(cv_tree_ur) # Model summary
+
+rpart.plot::rpart.plot(cv_tree_ur, yesno = TRUE , main = "CART with CV") # Plot the tree
+
+varImp(cv_tree_ur) # Variable Importance
+plot(cv_tree_ur$variable.importance) # Variable Importance plot
+
+# Plot the Complexity Parameter
+plotcp(cv_tree_ur) #  cp = 0.021
+
+# --------------------------------------------------------------------------------------------------------#
+start_time_6 = Sys.time()  # Start the timer
+
+# Build the tree model  using the Complexity Parameter
+tree_ur_prune = prune(cv_tree_ur, cp = 0.021) 
+
+end_time_6 = Sys.time()  # End the timer 
+(time_diff_6 = end_time_6 - start_time_6) # Time difference of 0.00465703 sec
+
+# Plot the Tree
+rattle::fancyRpartPlot(tree_ur_prune, main = "CART with CP ") # using rattle  # After Pruning
+
+# Bar Plot to see variable importance AFTER PRUNE
+barplot(tree_ur_prune$variable.importance, cex.names  = 0.8, las = 2 , col = "green") 
+
+# -------------------------- PERFORMANCE ON TRAINING DATA ---------------------------------#
+# Predictions on Training Data
+tree_ur_prune_predict_train = predict(tree_ur_prune, ur_train)
+
+# Mean Squared Error after Pruning
+(mse_cart_train = mean((tree_ur_prune_predict_train - ur_train$Unemployment_Rate)^2))
+
+# Root Mean Squared Error after Pruning
+(rmse_cart_train = sqrt(mse_cart_train)) 
+
+
+# -------------------------- PERFORMANCE ON TEST DATA --------------------------------------#
+# Predictions on Test Data
+tree_ur_prune_predict_test = predict(tree_ur_prune , ur_test)
+
+# Plot the graph
+#plot(tree_ur_predict, ur_test$Unemployment_Rate)
+
+# Mean Squared Error after Pruning
+(mse_cart_test = mean((tree_ur_prune_predict_test - ur_test$Unemployment_Rate)^2)) #  1.901695
+
+# Roor Mean Squared Error after Pruning
+(rmse_cart_test = sqrt(mse_cart_test)) # 1.37902
+
+#---------------------------- COMBINED RESULTS -------------------------------------------#
+# Report Training Performance Metrics
+cat("Training Performance Metrics:\n")
+cat("MSE on Training Data: ", mse_cart_train, "\n")  
+cat("RMSE on Training Data: ", rmse_cart_train, "\n") 
+
+# Report Test Performance Metrics
+cat("\nTest Performance Metrics:\n")
+cat("MSE on Test Data: ", mse_cart_test, "\n") 
+cat("RMSE on Test Data: ", rmse_cart_test, "\n") 
+
+# ----------------------------COLLECTIVE PLOTS-------------------------------------------# 
+par(mfrow = c(1,2))
+barplot(tree_ur$variable.importance, cex.names  = 0.8, las = 2, , col = "red", main = "Before Pruning") 
+barplot(tree_ur_prune$variable.importance, cex.names  = 0.8, las = 2 , col = "green", , main = "After Pruning") 
+par(mfrow = c(1, 1))
+
+```
+> tree_ur_prune
+n= 156 
+
+node), split, n, deviance, yval
+      * denotes terminal node
+
+ 1) root 156 498.2579000  6.873081  
+   2) Estimated_Resident_Population>=18791.4 87  44.5126500  5.582670  
+     4) Consumer_Price_Index>=78.85 70  25.6429300  5.364633 *
+     5) Consumer_Price_Index< 78.85 17   1.8391650  6.480469 *
+   3) Estimated_Resident_Population< 18791.4 69 126.2153000  8.500121  
+     6) Job_Vacancies>=59.35 42  33.9454000  7.891349  
+      12) Estimated_Resident_Population< 17435.3 22  16.5834900  7.445358  
+        24) Consumer_Price_Index>=49.75 8   0.9718164  6.373717 *
+        25) Consumer_Price_Index< 49.75 14   1.1744420  8.057725 *
+      13) Estimated_Resident_Population>=17435.3 20   8.1723750  8.381939 *
+     7) Job_Vacancies< 59.35 27  52.4917900  9.447100  
+      14) Estimated_Resident_Population< 17260.7 15  23.5158700  8.559156 *
+      15) Estimated_Resident_Population>=17260.7 12   2.3659270 10.557030 *
+------------------------------------------
+> # Report Training Performance Metrics
+> cat("Training Performance Metrics:\n")
+Training Performance Metrics:
+> cat("MSE on Training Data: ", mse_cart_train, "\n")  
+MSE on Training Data:  0.4082213 
+> cat("RMSE on Training Data: ", rmse_cart_train, "\n") 
+RMSE on Training Data:  0.638922 
+> 
+> # Report Test Performance Metrics
+> cat("\nTest Performance Metrics:\n")
+
+Test Performance Metrics:
+> cat("MSE on Test Data: ", mse_cart_test, "\n") 
+MSE on Test Data:  1.901695 
+> cat("RMSE on Test Data: ", rmse_cart_test, "\n") 
+RMSE on Test Data:  1.37902 
+
+# --------------------------------------- BAGGING ------------------------------------------------------------#
+```{r}
+
+# Data Partitioning
+set.seed(99) # Set the seed for model consistency
+
+# Training Data = Dec 1982 to Dec 2020
+ur_training_filter = (unemployment_rate$Year < 2021) | (unemployment_rate$Year == 2020 & unemployment_rate$Month == "Dec")
+# Test Data = Jan 2021 to March 2023
+ur_test_filter = (unemployment_rate$Year >= 2021) | (unemployment_rate$Year == 2021 & unemployment_rate$Month %in% c("Mar"))# Data Partitioning
+set.seed(99) # Set the seed for model consistency
+
+# Training Data = Dec 1982 to Dec 2020
+ur_training_filter = (unemployment_rate$Year < 2021) | (unemployment_rate$Year == 2020 & unemployment_rate$Month == "Dec")
+# Test Data = Jan 2021 to March 2023
+ur_test_filter = (unemployment_rate$Year >= 2021) | (unemployment_rate$Year == 2021 & unemployment_rate$Month %in% c("Mar"))
+
+# Create the training and test sets
+ur_train = unemployment_rate[ur_training_filter, ]
+ur_test = unemployment_rate[ur_test_filter, ]
+
+# Remove Year, Month, and Quarter since it's not part of the original predictors
+ur_train = ur_train[, -c(2, 3, 4)]
+ur_test = ur_test[, -c(2, 3, 4)]
+
+# Create the training and test sets
+ur_train = unemployment_rate[ur_training_filter, ]
+ur_test = unemployment_rate[ur_test_filter, ]
+
+# Remove Year, Month, and Quarter since it's not part of the original predictors
+ur_train = ur_train[, -c(2, 3, 4)]
+ur_test = ur_test[, -c(2, 3, 4)]
+
+#----------------------------------------------------------------------------------
+start_time_7 = Sys.time()  # Start the timer
+
+set.seed(99) # Set the seed for model consistency
+# Hyperparameters for Bagging
+hyperparameters = expand.grid(ntree = c(20:500)) # Vary the number of trees
+
+# Initialize variables to store the best MSE and corresponding hyperparameters for training data
+best_mse_train = Inf 
+best_hyperparameters_train = NULL
+
+# Bagging loop
+for (i in 1:nrow(hyperparameters)) 
+  {
+    ntree = hyperparameters$ntree[i]
+  
+    # Create a bootstrapped sample from the training data
+    bootstrap_sample = ur_train[sample(1:nrow(ur_train), replace = TRUE), ]
+  
+    # Train a random forest regression model (bagging) with the current hyperparameters
+    ur_bag_cart = randomForest(Unemployment_Rate ~. ,
+                             data = bootstrap_sample,
+                             ntree = ntree,
+                             mtry = 7,
+                             scale = TRUE,
+                             importance = TRUE)
+
+    # Make predictions on the training set
+    predictions_train = predict(ur_bag_cart, newdata = ur_train)
+  
+    # Calculate MSE for the training set
+    mse_train = mean((predictions_train - ur_train$Unemployment_Rate)^2)
+
+    # Check if this model has a better MSE compared to the overall best for training data
+    if (mse_train < best_mse_train) 
+      {
+        best_mse_train = mse_train
+        best_hyperparameters_train = ntree
+        best_model_bag_train = ur_bag_cart
+      }
+}
+
+end_time_7 = Sys.time()  # End the timer
+(time_diff_7 = end_time_7 - start_time_7) # Time difference of 57.03038 secs
+
+# Calculate RMSE for training data
+(rmse_train = sqrt(best_mse_train))
+
+# # Print the best MSE for training data
+# cat("Best Mean Squared Error (MSE) for Training Data:", best_mse_train, "\n")
+# 
+# # Print the RMSE for training data
+# cat("Root Mean Squared Error (RMSE) for Training Data:", rmse_train, "\n")
+
+# Print the best hyperparameters for training data
+cat("Best Hyperparameters for Training Data:\n",
+    "Number of Trees (ntree):", best_hyperparameters_train, "\n")
+
+print(best_model_bag_train) # Print the Best model obtained from the Bagging
+
+best_model_bag_train$importance # Variable Importance 
+
+# Variable Importance Plot
+varImpPlot(best_model_bag_train, main = "Variable Importance - Bagging")
+```
+> cat("Best Hyperparameters for Training Data:\n",
++     "Number of Trees (ntree):", best_hyperparameters_train, "\n")
+Best Hyperparameters for Training Data:
+ Number of Trees (ntree): 134 
+> 
+> print(best_model_bag_train)
+
+Call:
+ randomForest(formula = Unemployment_Rate ~ ., data = bootstrap_sample,      ntree = ntree, mtry = 7, scale = TRUE, importance = TRUE) 
+               Type of random forest: regression
+                     Number of trees: 134
+No. of variables tried at each split: 7
+
+          Mean of squared residuals: 0.1183736
+                    % Var explained: 96.63
+
+> (time_diff_7 = end_time_7 - start_time_7) # Time difference of 0.00465703 sec
+Time difference of 57.03038 secs
+
+> best_model_bag_train$importance
+                                 %IncMSE IncNodePurity
+Percentage_change_GDP         0.10159991     10.647916
+Percentage_change_GFCE        0.04742719      8.127313
+Percentage_change_FCEAI       0.02393412      3.745323
+Term_of_TI                    0.04934037      5.363021
+Consumer_Price_Index          1.59638792    140.257095
+Job_Vacancies                 2.26139278    142.720687
+Estimated_Resident_Population 2.56916218    230.364305               
+
+# Build The model using the Best Hyperparameters
+
+```{r}
+# Train the final model with the best hyperparameters on the full training data
+start_time_8 = Sys.time()  # Start the timer
+set.seed(99)
+final_bagged_model = randomForest(Unemployment_Rate ~. , 
+                              data = ur_train, 
+                              mtry = 7,
+                              ntree = 134,
+                              importance = TRUE,
+                              scale = TRUE) # using all 7 predictors
+
+#start_time_8 = Sys.time()  # Start the timer
+end_time_8 = Sys.time()  # End the timer
+(time_diff_8 = end_time_8 - start_time_8) # Time difference of 0.07677102 secs
+
+final_bagged_model # Model results 
+final_bagged_model$importance  # Variable Importance
+
+# Variable Importance Plot
+varImpPlot(final_bagged_model, main = "Variable Importance - Bagging with the Optimal Hyperparameters")
+
+# -------------------------- PERFORMANCE ON TRAINING DATA ---------------------------------#
+# Prediction on Training Data
+predicted_bag_trees_train = predict(final_bagged_model, ur_train)
+
+cat("Training Performance Metrics:\n")
+# MSE
+(mse_bag_train = mean((predicted_bag_trees_train - ur_train$Unemployment_Rate)^2)) #   0.04688094
+
+# RMSE
+(rmse_bag_train = sqrt(mse_bag_train))  #  0.2165201
+
+# -------------------------- PERFORMANCE ON TEST DATA ---------------------------------#
+# Prediction on Test Data
+predicted_bag_trees_test = predict(final_bagged_model, ur_test)
+
+cat("Test Performance Metrics:\n")
+# MSE
+(mse_bag_test = mean((predicted_bag_trees_test - ur_test$Unemployment_Rate)^2))  # 5.290766
+
+# RMSE
+(rmse_bag_test = sqrt(mse_bag_test))  # 2.300167
+```
+
+> final_bagged_model
+
+Call:
+ randomForest(formula = Unemployment_Rate ~ ., data = ur_train,      mtry = 7, ntree = 134, importance = TRUE, scale = TRUE) 
+               Type of random forest: regression
+                     Number of trees: 134
+No. of variables tried at each split: 7
+
+          Mean of squared residuals: 0.2634143
+                    % Var explained: 91.75
+> final_bagged_model$importance
+
+                                   %IncMSE IncNodePurity
+Percentage_change_GDP          0.010018927      6.535486
+Percentage_change_GFCE         0.001444173      4.501828
+Percentage_change_FCEAI       -0.005118712      2.734659
+Term_of_TI                     0.010328915      5.168316
+Consumer_Price_Index           1.249294610    122.756478
+Job_Vacancies                  1.867548779    169.813098
+Estimated_Resident_Population  1.816775862    182.325098
+
+> cat("Training Performance Metrics:\n")
+Training Performance Metrics:
+> # MSE
+> (mse_bag_train = mean((predicted_bag_trees_train - ur_train$Unemployment_Rate)^2)) #   0.04688094
+[1] 0.04688094
+
+> # RMSE
+> (rmse_bag_train = sqrt(mse_bag_train))  #  0.2165201
+[1] 0.2165201
+
+> cat("Test Performance Metrics:\n")
+Test Performance Metrics:
+> # MSE
+> (mse_bag_test = mean((predicted_bag_trees_test - ur_test$Unemployment_Rate)^2))  # 5.290766
+[1] 5.290766
+
+> # RMSE
+> (rmse_bag_test = sqrt(mse_bag_test))  # 2.300167
+[1] 2.300167
+
+# --------------------------------------- RANDOM FOREST -----------------------------------#
+
+## USING THE RANDOM FORREST FUNCTION
+```{r}
+# Data Partitioning
+set.seed(99) # Set the seed for model consistency
+
+# Training Data = Dec 1982 to Dec 2020
+ur_training_filter = (unemployment_rate$Year < 2021) | (unemployment_rate$Year == 2020 & unemployment_rate$Month == "Dec")
+# Test Data = Jan 2021 to March 2023
+ur_test_filter = (unemployment_rate$Year >= 2021) | (unemployment_rate$Year == 2021 & unemployment_rate$Month %in% c("Mar"))
+
+# Create the training and test sets
+ur_train = unemployment_rate[ur_training_filter, ]
+ur_test = unemployment_rate[ur_test_filter, ]
+
+# Remove Year, Month, and Quarter since they are not part of the original predictors
+ur_train = ur_train[, -c(2, 3, 4)]
+ur_test = ur_test[, -c(2, 3, 4)]
+
+#--------------------------------------------------------------------------------------#
+
+start_time_9 = Sys.time()  # Start the timer
+set.seed(99) # Set the seed for model consistency
+
+# Hyperparameters for Random Forest
+hyperparameters = expand.grid(
+  ntree = c(20:500),                # Number of trees in the forest
+  max_depth = c(5, 10, 15),         # Maximum depth of each tree
+  mtry = 3                      # Number of features considered for splitting at each node ( 7/3 ~ here is 3)
+  )
+
+# Initialize variables to store the best MSE and corresponding hyperparameters
+best_mse_train_rf = Inf
+best_hyperparameters_train = NULL
+
+# Random Forest loop
+for (i in 1:nrow(hyperparameters)) 
+  {
+
+    # Train a random forest regression model with the current hyperparameters
+    rf_ur = randomForest(Unemployment_Rate ~ .,
+                         data = ur_train,
+                         ntree = hyperparameters$ntree[i],
+                         max_depth = hyperparameters$max_depth[i],
+                         mtry = hyperparameters$mtry[i],
+                         importance = TRUE)
+  
+    # Make predictions on the Training set
+    predictions_train = predict(rf_ur, newdata = ur_train)
+  
+    # Calculate MSE for the training set
+    mse_train_rf = mean((predictions_train - ur_train$Unemployment_Rate)^2)
+  
+    # Check if this model has a better MSE compared to the overall best
+    if (mse_train_rf < best_mse_train_rf) 
+      {
+        best_mse_train_rf = mse_train_rf
+        best_hyperparameters_train = hyperparameters$ntree[i]  # Update the best hyperparameters
+        best_model_rf_train = rf_ur  # Update the best model
+      }
+}
+
+#start_time_9 = Sys.time()  # Start the timer
+end_time_9 = Sys.time()  # End the timer
+(time_diff_9 = end_time_9 - start_time_9) # Time difference of 2.279682 mins
+
+
+# # Calculate RMSE for training data
+# (rmse_train_rf = sqrt(best_mse_train_rf))
+# 
+# # Print the best MSE for the training set
+# cat("Best Mean Squared Error (MSE) for Training Data:", best_mse_train_rf, "\n")
+# 
+# # Print the RMSE for the training set
+# cat("Root Mean Squared Error (RMSE) for Training Data:", rmse_train_rf, "\n")
+
+# Print the best hyperparameters for the training set
+cat("Best Hyperparameters:\n",
+    "Number of Trees (ntree):", best_hyperparameters_train, "\n",
+    "Maximum Depth:", hyperparameters$max_depth[which.min(best_mse_train_rf)], "\n",
+    "mtry:", hyperparameters$mtry[which.min(best_mse_train_rf)], "\n"
+    )
+
+print(best_model_rf_train) # Summary of the best model
+best_model_rf_train$importance # Variable Importance for Random Forest
+varImpPlot(best_model_rf_train, main = "Variable Importance - Random Forest") # Variable Importance Plot
+
+```
+#(time_diff_9 = end_time_9 - start_time_9) # Time difference of 3.565514 mins
+
+Best Hyperparameters:
+ Number of Trees (ntree): 68 
+ Maximum Depth: 5 
+ mtry: 3 
+> 
+> print(best_model_rf_train) # Summary of the best model
+
+Call:
+ randomForest(formula = Unemployment_Rate ~ ., data = ur_train,      ntree = hyperparameters$ntree[i], max_depth = hyperparameters$max_depth[i],      mtry = hyperparameters$mtry[i], importance = TRUE) 
+               Type of random forest: regression
+                     Number of trees: 68
+No. of variables tried at each split: 3
+
+          Mean of squared residuals: 0.1963705
+                    % Var explained: 93.85
+                    
+> best_model_rf_train$importance # Variable Importance for Random Forest
+                                   %IncMSE IncNodePurity
+Percentage_change_GDP          0.041499850      7.418429
+Percentage_change_GFCE        -0.005102325      8.077833
+Percentage_change_FCEAI        0.012504546      5.893391
+Term_of_TI                     0.039759585      8.973473
+Consumer_Price_Index           2.160515622    185.569760
+Job_Vacancies                  1.892137590    145.922196
+Estimated_Resident_Population  1.626099461    134.686699
+
+# Build The model using the Best Hyperparameters for Random Forest
+
+```{r}
+start_time_10 = Sys.time()  # Start the timer
+set.seed(99) # Set seed for model consistency
+
+# Train the final model with the best hyperparameters on the full training data
+final_rf_model = randomForest(Unemployment_Rate ~. ,data = ur_train, 
+                              mtry = 3,
+                              ntree = 68,
+                              max_depth = 5,
+                              importance = TRUE) # using all 7/3 predictors
+
+end_time_10 = Sys.time()  # End the timer
+(time_diff_10 = end_time_10 - start_time_10) # Time difference of 0.02725506 secs
+
+
+final_rf_model # Model Results
+final_rf_model$importance # Variable Importance
+
+# Variable Importance Plot
+varImpPlot(final_rf_model, main = "Variable Importance - Random Forest with the Optimal Hyperparameters")
+
+# -------------------------- PERFORMANCE ON TRAINING DATA ---------------------------------#
+# Prediction on Training Data
+predicted_rf_trees_train = predict(final_rf_model, ur_train)
+
+cat("Training Performance Metrics:\n")
+# MSE
+(mse_rf_train = mean((predicted_rf_trees_train - ur_train$Unemployment_Rate)^2)) # 0.04358691
+
+# RMSE
+(rmse_rf_train = sqrt(mse_rf_train))  #  0.2087748
+
+# -------------------------- PERFORMANCE ON TEST DATA -------------------------------
+# Prediction on Test Data
+predicted_rf_trees_test = predict(final_rf_model, ur_test)
+
+cat("Test Performance Metrics:\n")
+# MSE
+(mse_rf_test = mean((predicted_rf_trees_test - ur_test$Unemployment_Rate)^2)) # 3.776315
+
+# RMSE
+(rmse_rf_test = sqrt(mse_rf_test))  #  1.943274
+```
+
+> final_rf_model
+
+Call:
+ randomForest(formula = Unemployment_Rate ~ ., data = ur_train,      mtry = 3, ntree = 68, max_depth = 5, split_criterion = "gini",      importance = TRUE, ) 
+               Type of random forest: regression
+                     Number of trees: 68
+No. of variables tried at each split: 3
+
+          Mean of squared residuals: 0.237437
+                    % Var explained: 92.57
+> final_rf_model$importance # Important Variables 
+                                  %IncMSE IncNodePurity
+Percentage_change_GDP          0.02663089      7.196208
+Percentage_change_GFCE        -0.01131663      6.927658
+Percentage_change_FCEAI        0.01610534      8.258370
+Term_of_TI                     0.02125517     13.497688
+Consumer_Price_Index           1.38698353    152.640650
+Job_Vacancies                  1.65711359    143.448320
+Estimated_Resident_Population  1.76182371    161.676639
+
+> # -------------------------- PERFORMANCE ON TRAINING DATA ---------------------------------#
+> # Prediction on Training Data
+> predicted_rf_trees_train = predict(final_rf_model, ur_train)
+> 
+> cat("Training Performance Metrics:\n")
+Training Performance Metrics:
+> # MSE
+> (mse_rf_train = mean((predicted_rf_trees_train - ur_train$Unemployment_Rate)^2)) 
+[1] 0.04358691
+> 
+> # RMSE
+> (rmse_rf_train = sqrt(mse_rf_train))  
+[1] 0.2087748
+> 
+> # -------------------------- PERFORMANCE ON TEST DATA -------------------------------
+> # Prediction on Test Data
+> predicted_rf_trees_test = predict(final_rf_model, ur_test)
+> 
+> cat("Test Performance Metrics:\n")
+Test Performance Metrics:
+> # MSE
+> (mse_rf_test = mean((predicted_rf_trees_test - ur_test$Unemployment_Rate)^2)) 
+[1] 3.776315
+> 
+> # RMSE
+> (rmse_rf_test = sqrt(mse_rf_test))  
+[1] 1.943274
+
+# ----------------------------------------- BOOSTING -------------------------------------------------------------
+# Gradient Booosting
+
+```{r}
+
+start_time_11 = Sys.time()  # Start the timer
+set.seed(99) # Set seed for model consistency
+
+# 10 -fold CV on training data
+ur_train_control = trainControl(method = "cv",
+                                number = 10,
+                                savePredictions = "final") # save
+
+# Build the model on trainig data
+boost_ur = caret::train(Unemployment_Rate ~ . , data = ur_train,
+                         method = "gbm",
+                         trControl = ur_train_control)
+
+#start_time_11 = Sys.time()  # Start the timer
+end_time_11 = Sys.time()  # End the timer
+(time_diff_11 = end_time_11 - start_time_11) # Time difference of 0.8710001 secs
+
+boost_ur # Model results
+summary(boost_ur) # Model summary
+
+boost_ur$bestTune # Best Model
+
+plot(boost_ur, main = "Boosting using 10 -fold CV") # Plot the model
+
+# Prediction on Test Data
+predicted_xgb = predict(boost_ur, ur_test)
+
+# MSE
+(mse_sgb_boost = mean((predicted_xgb - ur_test$Unemployment_Rate)^2))   # 2.418606
+
+# RMSE
+(rmse_sgb_boost = sqrt(mse_sgb_boost)) # 1.555187
+
+```
+> summary(boost_ur)
+                                                        var   rel.inf
+Job_Vacancies                                 Job_Vacancies 44.193020
+Consumer_Price_Index                   Consumer_Price_Index 42.677890
+Estimated_Resident_Population Estimated_Resident_Population  3.965492
+Percentage_change_GDP                 Percentage_change_GDP  3.508895
+Term_of_TI                                       Term_of_TI  2.402376
+Percentage_change_FCEAI             Percentage_change_FCEAI  1.712144
+Percentage_change_GFCE               Percentage_change_GFCE  1.540181
+
+> plot(boost_ur, main = "Boosting") # Plot the model
+
+> boost_ur$bestTune # Best Model
+
+  n.trees interaction.depth shrinkage n.minobsinnode
+8     100                 3       0.1             10
+
+> plot(boost_ur, main = "Boosting") # Plot the model
+
+> # Prediction on Test Data
+> predicted_xgb = predict(boost_ur, ur_test)
+
+> # MSE
+> (mse_sgb_boost = mean((predicted_xgb - ur_test$Unemployment_Rate)^2))   # 2.418606
+[1] 2.418606
+> 
+> # RMSE
+> (rmse_sgb_boost = sqrt(mse_sgb_boost)) # 1.555187
+[1] 1.555187
+
+# TUNE THE BOOSTING PARAMETERS
+```{r}
+# Set the training control for Boosting
+ur_train_control = trainControl(method = "cv",
+                                number = 10,
+                                savePredictions = "final"
+                                 ) # save
+
+# Set the hyperparameters for Boosting
+gbmGrid =  expand.grid(interaction.depth = c(2,5,10,15),  # Max Tree Depth
+                        n.trees = c(1:150), # Boosting Iterations
+                        shrinkage = c(0.001, 0.1,0.15),# Shrinkage = Learning Rate
+                        n.minobsinnode = c(5,10,20) # minimum number of training set samples in a node to commence splitting 
+                       )
+
+start_time_12 = Sys.time()  # Start the timer
+set.seed(99) # Set seed for Model Consistency
+boost_ur_tune = caret::train(Unemployment_Rate ~ . , data = ur_train,
+                         method = "gbm",
+                         trControl = ur_train_control,
+                         tuneGrid = gbmGrid)
+
+#start_time_12 = Sys.time()  # Start the timer
+end_time_12 = Sys.time()  # End the timer
+(time_diff_12 = end_time_12 - start_time_12) # Time difference of 3.900011 mins
+
+summary(boost_ur_tune) # Model Summary 
+boost_ur_tune$bestTune # Best Parameters
+
+plot(boost_ur_tune , metric = "RMSE" , main = "Hyperparameter Importance - Boosting") # Plot the model
+
+# # Prediction on Test Data
+# predicted_xgb_tuned = predict(boost_ur_tune, ur_test)
+# 
+# # MSE
+# (mse_sgb_boost_tuned = mean((predicted_xgb_tuned - ur_test$Unemployment_Rate)^2)) 
+# 
+# # RMSE
+# (rmse_sgb_boost_tuned = sqrt(mse_sgb_boost_tuned)) 
+
+```
+> summary(boost_ur_tune)
+                                                        var   rel.inf
+Consumer_Price_Index                   Consumer_Price_Index 51.658775
+Job_Vacancies                                 Job_Vacancies 34.739494
+Percentage_change_GDP                 Percentage_change_GDP  3.993640
+Term_of_TI                                       Term_of_TI  2.863609
+Percentage_change_GFCE               Percentage_change_GFCE  2.511384
+Estimated_Resident_Population Estimated_Resident_Population  2.148509
+Percentage_change_FCEAI             Percentage_change_FCEAI  2.084589
+
+> boost_ur_tune$bestTune
+     n.trees interaction.depth shrinkage n.minobsinnode
+4713      63                10      0.15             10
+
+> # MSE
+> (mse_sgb_boost_tuned = mean((predicted_xgb_tuned - ur_test$Unemployment_Rate)^2)) # 2.516795 
+[1] 2.516795
+> 
+> # RMSE
+> (rmse_sgb_boost_tuned = sqrt(mse_sgb_boost_tuned)) # 1.611611
+[1] 1.586441
+
+# BOOSTING - Using the Best HyperParameters
+```{r}
+#start_time_13 = Sys.time()  # Start the timer
+set.seed(99) # Set seed for model consistency
+ur_train_control = trainControl(method = "cv",
+                                number = 10,
+                                savePredictions = "final",
+                                 ) # save
+
+gbmGrid_2 =  expand.grid(interaction.depth = 10,  # Max Tree Depth
+                        n.trees =  63, # Boosting Iterations
+                        shrinkage = 0.15 ,# Shrinkage = Learning Rate
+                        n.minobsinnode = 10 # minimum number of training set samples in a node to commence splitting 
+                       )
+
+start_time_13 = Sys.time()  # Start the timer
+set.seed(99) # Set seed for model consistency
+boost_best_ur = caret::train(Unemployment_Rate ~ . , data = ur_train,
+                 method = "gbm",
+                 trControl = ur_train_control,
+                 tuneGrid = gbmGrid_2)  
+
+#start_time_13 = Sys.time()  # Start the timer
+end_time_13 = Sys.time()  # End the timer
+(time_diff_13 = end_time_13 - start_time_13) # Time difference of 0.4310961 secs
+
+
+boost_best_ur # Model results
+summary(boost_best_ur) # Model summary
+
+boost_best_ur$bestTune # Best Model
+
+# -------------------------- PERFORMANCE ON TRAINING DATA ---------------------------------#
+# Prediction on Training Data
+predicted_sgb_train = predict(boost_best_ur, ur_train)
+
+cat("Train Performance Metrics:\n")
+# MSE
+(mse_sgb_train = mean((predicted_sgb_train - ur_train$Unemployment_Rate)^2))   # 0.1428478
+
+# RMSE
+(rmse_sgb_train = sqrt(mse_sgb_train))  # 0.3779522
+
+# -------------------------- PERFORMANCE ON TEST DATA ---------------------------------#
+# Prediction on Test Data
+predicted_sgb_test = predict(boost_best_ur, ur_test)
+
+cat("Test Performance Metrics:\n")
+# MSE
+(mse_sgb_test = mean((predicted_sgb_test - ur_test$Unemployment_Rate)^2))   # 2.460212
+
+# RMSE
+(rmse_sgb_test = sqrt(mse_sgb_test)) # 1.568506
+
+```
+> boost_best_ur
+Stochastic Gradient Boosting 
+
+156 samples
+  7 predictor
+
+No pre-processing
+Resampling: Cross-Validated (10 fold) 
+Summary of sample sizes: 141, 140, 140, 140, 140, 140, ... 
+Resampling results:
+
+  RMSE       Rsquared  MAE      
+  0.6361827  0.887461  0.4326512
+
+Tuning parameter 'n.trees' was held constant at a value of 63
+Tuning parameter 'interaction.depth' was held constant at a value of
+ 10
+Tuning parameter 'shrinkage' was held constant at a value of 0.15
+Tuning parameter 'n.minobsinnode' was held constant at a value
+ of 10
+ 
+> summary(boost_best_ur)
+                                                        var   rel.inf
+Consumer_Price_Index                   Consumer_Price_Index 49.368438
+Job_Vacancies                                 Job_Vacancies 38.649790
+Estimated_Resident_Population Estimated_Resident_Population  3.550039
+Percentage_change_GDP                 Percentage_change_GDP  3.177617
+Percentage_change_GFCE               Percentage_change_GFCE  2.004011
+Term_of_TI                                       Term_of_TI  1.934238
+Percentage_change_FCEAI             Percentage_change_FCEAI  1.315867
+
+
+> boost_best_ur$bestTune # Best Model
+
+  n.trees interaction.depth shrinkage n.minobsinnode
+1      63                10      0.15             10
+
+> cat("Train Performance Metrics:\n")
+Train Performance Metrics:
+> # MSE
+> (mse_sgb_train = mean((predicted_sgb_train - ur_train$Unemployment_Rate)^2))  
+[1] 0.1428478
+> 
+> # RMSE
+> (rmse_sgb_train = sqrt(mse_sgb_train)) 
+[1] 0.3779522
+> 
+> # -------------------------- PERFORMANCE ON TEST DATA ---------------------------------#
+> # Prediction on Test Data
+> predicted_sgb_test = predict(boost_best_ur, ur_test)
+
+> cat("Test Performance Metrics:\n")
+Test Performance Metrics:
+> # MSE
+> (mse_sgb_test = mean((predicted_sgb_best - ur_test$Unemployment_Rate)^2))   # 2.460212
+[1] 2.460212
+> 
+> # RMSE
+> (rmse_sgb_test = sqrt(mse_sgb_test)) # 1.568506
+[1] 1.568506
+
+# ----------------------------------------- IV.SUPPORT VECTOR MACHINES -----------------------------------------------
+# IV. SUPPORT VECTOR MACHINES
+
+# 1.  With kernel = "linear" and hyperparameters : cost and gamma
+```{r}
+# With kernel = "linear" with cost and gamma
+
+start_time_14 = Sys.time()  # Start the timer
+set.seed(99) # Set seed for model consistency
+tune_ur_linear = tune(svm,
+                 Unemployment_Rate ~. ,
+                 data = ur_train, 
+                 scale = TRUE,
+                 kernel= c("linear"), 
+                 ranges=list(cost= c(0.001, 0.01, 0.1, 1,5,10,50),
+                             gamma = c(0.001, 0.01, 0.1, 1,5,10,50)))
+
+# start_time_14 = Sys.time()  # Start the timer
+end_time_14 = Sys.time()  # End the timer
+(time_diff_14 = end_time_14 - start_time_14) # Time difference of 9.060912 secs
+
+tune_ur_linear  # Model results
+summary(tune_ur_linear$best.model) # Summary of the best model
+
+plot(tune_ur_linear) # Plot the model of SVM
+
+tune_ur_linear$best.model # Best Model
+tune_ur_linear$best.parameters  # Best Parameters 
+tune_ur_linear$best.performance # Best Performance
+
+# -------------------------- PERFORMANCE ON TRAIN DATA ---------------------------------#
+# Predictions on Train Data using the best model
+svm_predict_linear_train = predict(tune_ur_linear$best.model, ur_train)
+
+# MSE
+(mse_svm_linear_train = mean((svm_predict_linear_train - ur_train$Unemployment_Rate)^2)) # 0.9088124
+
+# RMSE
+(rmse_svm_linear_train = sqrt(mse_svm_linear_train))  # 0.9533165
+
+# -------------------------- PERFORMANCE ON TEST DATA ---------------------------------#
+# Predictions on Test Data using the best model
+svm_predict_linear_test = predict(tune_ur_linear$best.model, ur_test)
+
+# MSE
+(mse_svm_linear_test = mean((svm_predict_linear_test - ur_test$Unemployment_Rate)^2)) # 31.71556
+
+# RMSE
+(rmse_svm_linear_test = sqrt(mse_svm_linear_test))  # 5.631657
+```
+> tune_ur_linear
+
+Parameter tuning of ‘svm’:
+
+- sampling method: 10-fold cross validation 
+
+- best parameters:
+ cost gamma
+    1 0.001
+
+- best performance: 1.156467 
+
+> summary(tune_ur_linear$best.model)
+
+> tune_ur_linear$best.model
+
+Call:
+best.tune(method = svm, train.x = Unemployment_Rate ~ ., data = ur_train, ranges = list(cost = c(0.001, 0.01, 
+    0.1, 1, 5, 10, 50), gamma = c(0.001, 0.01, 0.1, 1, 5, 10, 50)), scale = TRUE, kernel = c("linear"))
+
+
+Parameters:
+   SVM-Type:  eps-regression 
+ SVM-Kernel:  linear 
+       cost:  1 
+      gamma:  0.001 
+    epsilon:  0.1 
+
+
+Number of Support Vectors:  121
+
+> tune_ur_linear$best.performance
+
+[1] 1.156467
+
+> # -------------------------- PERFORMANCE ON TRAIN DATA ---------------------------------#
+> # Predictions on Train Data using the best model
+> svm_predict_linear_train = predict(tune_ur_linear$best.model, ur_train)
+> 
+> # MSE
+> (mse_svm_linear_train = mean((svm_predict_linear_train - ur_train$Unemployment_Rate)^2)) # 0.9088124
+[1] 0.9088124
+> 
+> # RMSE
+> (rmse_svm_linear_train = sqrt(mse_svm_linear_train))  # 0.9533165
+[1] 0.9533165
+> 
+> # -------------------------- PERFORMANCE ON TEST DATA ---------------------------------#
+> # Predictions on Test Data using the best model
+> svm_predict_linear_test = predict(tune_ur_linear$best.model, ur_test)
+> 
+> # MSE
+> (mse_svm_linear_test = mean((svm_predict_linear_test - ur_test$Unemployment_Rate)^2)) # 31.71556
+[1] 31.71556
+> 
+> # RMSE
+> (rmse_svm_linear_test = sqrt(mse_svm_linear_test))  # 5.631657
+[1] 5.631657
+
+
+# ---------------------------------------------------------------------------------------
+
+# 2.  With kernel = "radial" and hyperparameters : cost and gamma
+```{r}
+# With kernel = "linear" with cost and gamma
+
+start_time_15 = Sys.time()  # Start the timer
+set.seed(99)
+tune_ur_radial = tune(svm,
+                 Unemployment_Rate ~. ,
+                 data = ur_train, 
+                 scale = TRUE,
+                 kernel= "radial", 
+                 ranges=list(cost= c(0.001, 0.01, 0.1, 1,5,10,50),
+                             gamma = c(0.001, 0.01, 0.1, 1,5,10,50)))
+
+# start_time_15 = Sys.time()  # Start the timer
+end_time_15 = Sys.time()  # End the timer
+(time_diff_15 = end_time_15 - start_time_15) # Time difference of 4.546159 secs
+
+tune_ur_radial # Model results
+summary(tune_ur_radial$best.model) # Summary of the best model
+plot(tune_ur_radial) # Plot the model
+
+tune_ur_radial$best.model # Best Model
+tune_ur_radial$best.parameters  # Best Parameters
+tune_ur_radial$best.performance # Best Performance
+
+
+
+# -------------------------- PERFORMANCE ON TRAIN DATA ---------------------------------#
+# Predictions on Train Data using the best model
+svm_predict_radial_train = predict(tune_ur_radial$best.model, ur_train)
+
+# MSE
+(mse_svm_radial_train = mean((svm_predict_radial_train - ur_train$Unemployment_Rate)^2)) # 0.2476974
+
+# RMSE
+(rmse_svm_radial_train = sqrt(mse_svm_radial_train))  # 0.4976921
+
+# -------------------------- PERFORMANCE ON TEST DATA ---------------------------------#
+
+# Predictions on the Test Data using the Best Model
+svm_predict_radial_test = predict(tune_ur_radial$best.model, ur_test)
+
+# MSE
+(mse_svm_radial_test = mean((svm_predict_radial_test - ur_test$Unemployment_Rate)^2)) # 2.705984
+
+# RMSE
+(rmse_svm_radial_test = sqrt(mse_svm_radial_test))  # 1.644988
+```
+
+> tune_ur_radial$best.model
+
+Call:
+best.tune(method = svm, train.x = Unemployment_Rate ~ ., data = ur_train, ranges = list(cost = c(0.001, 0.01, 
+    0.1, 1, 5, 10, 50), gamma = c(0.001, 0.01, 0.1, 1, 5, 10, 50)), scale = TRUE, kernel = "radial")
+
+
+Parameters:
+   SVM-Type:  eps-regression 
+ SVM-Kernel:  radial 
+       cost:  5 
+      gamma:  0.1 
+    epsilon:  0.1 
+
+
+Number of Support Vectors:  111
+
+> tune_ur_radial$best.parameters 
+   cost gamma
+19    5   0.1
+
+> # -------------------------- PERFORMANCE ON TRAIN DATA ---------------------------------#
+> # Predictions on Train Data using the best model
+> svm_predict_radial_train = predict(tune_ur_radial$best.model, ur_train)
+> 
+> # MSE
+> (mse_svm_radial_train = mean((svm_predict_radial_train - ur_train$Unemployment_Rate)^2)) # 0.2476974
+[1] 0.2476974
+> 
+> # RMSE
+> (rmse_svm_radial_train = sqrt(mse_svm_radial_train))  # 0.4976921
+[1] 0.4976921
+> 
+> # -------------------------- PERFORMANCE ON TEST DATA ---------------------------------#
+> 
+> # Predictions on the Test Data using the Best Model
+> svm_predict_radial_test = predict(tune_ur_radial$best.model, ur_test)
+> 
+> # MSE
+> (mse_svm_radial_test = mean((svm_predict_radial_test - ur_test$Unemployment_Rate)^2)) # 2.705984
+[1] 2.705984
+> 
+> # RMSE
+> (rmse_svm_radial_test = sqrt(mse_svm_radial_test))  # 1.644988
+[1] 1.644988
+
+# 3.  With kernel = "polynomial" and hyperparameters : cost and gamma
+```{r}
+# With kernel = "linear" with cost and gamma
+start_time_16 = Sys.time()  # Start the timer
+set.seed(99) # Set seed for model consistency
+tune_ur_poly = tune(svm,
+                 Unemployment_Rate ~. ,
+                 data = ur_train, 
+                 scale = TRUE,
+                 kernel= "polynomial", 
+                 ranges=list(cost= c(0.001, 0.01, 0.1, 1,5),
+                             gamma = c(0.001, 0.01, 0.1, 1),
+                             degree = c(2,3,4)
+                             ))
+
+# start_time_16 = Sys.time()  # Start the timer
+end_time_16 = Sys.time()  # End the timer
+(time_diff_16 = end_time_16 - start_time_16) # Time difference of 36.7868 secs
+
+tune_ur_poly # Model results
+summary(tune_ur_poly$best.model) # Summary of the best model
+
+#plot(tune_ur_poly)
+
+tune_ur_poly$best.model # Best model 
+tune_ur_poly$best.parameters # Best Parameters
+tune_ur_poly$best.performance # Best Performance
+
+# -------------------------- PERFORMANCE ON TRAIN DATA ---------------------------------#
+# Predictions on Train Data using the best model
+svm_predict_poly_train = predict(tune_ur_poly$best.model, ur_train)
+
+# MSE
+(mse_svm_poly_train = mean((svm_predict_poly_train - ur_train$Unemployment_Rate)^2)) # 2.733716
+
+# RMSE
+(rmse_svm_poly_train = sqrt(mse_svm_poly_train))  # 1.653395
+
+# -------------------------- PERFORMANCE ON TEST DATA ---------------------------------#
+# Predictions on the Test Data using the Best Model
+svm_predict_poly_test = predict(tune_ur_poly$best.model, ur_test)
+
+# MSE
+(mse_svm_poly_test = mean((svm_predict_poly_test - ur_test$Unemployment_Rate)^2)) # 0.5671939
+
+# RMSE
+(rmse_svm_poly_test = sqrt(mse_svm_poly_test))  # 0.7531228
+
+```
+> tune_ur_poly$best.model
+
+Call:
+best.tune(method = svm, train.x = Unemployment_Rate ~ ., data = ur_train, ranges = list(cost = c(0.001, 0.01, 0.1, 
+    1, 5), gamma = c(0.001, 0.01, 0.1, 1), degree = c(2, 3, 4)), scale = TRUE, kernel = "polynomial")
+
+
+Parameters:
+   SVM-Type:  eps-regression 
+ SVM-Kernel:  polynomial 
+       cost:  1 
+     degree:  2 
+      gamma:  0.1 
+     coef.0:  0 
+    epsilon:  0.1 
+
+
+Number of Support Vectors:  137
+
+> tune_ur_poly$best.parameters 
+   cost gamma degree
+14    1   0.1      2
+> tune_ur_poly$best.performance
+[1] 3.185752
+> 
+> # Predictions on the Test Data using the Best Model
+> svm_predict_poly = predict(tune_ur_poly$best.model, ur_test)
+> 
+> (mse_svm_poly = mean((svm_predict_poly - ur_test$Unemployment_Rate)^2)) # [1] 2.705984
+[1] 0.5671939
+> 
+> # RMSE
+> (rmse_svm_poly = sqrt(mse_svm_poly))  # 0.7531228
+[1] 0.7531228
+
+# Build the Model with the Best Hyperparameters ( SVM with kernel = polynomial)
+```{r}
+
+start_time_17 = Sys.time()  # Start the timer
+set.seed(99)
+svm_ur_best = svm(Unemployment_Rate ~. , data = ur_train , 
+                  kernel = "poly", 
+                  scale = TRUE,
+                  cost = 1,
+                  gamma= 0.1,
+                  degree = 2) 
+
+# start_time_17 = Sys.time()  # Start the timer
+end_time_17 = Sys.time()  # End the timer
+(time_diff_17 = end_time_17 - start_time_17) # Time difference of 0.01179504 secs
+
+svm_ur_best
+summary(svm_ur_best)
+
+
+# -------------------------- PERFORMANCE ON TEST DATA ---------------------------------#
+# Predictions on the Test Data using the Best Model
+svm_predict_poly_test_2 = predict(svm_ur_best, ur_test)
+
+# MSE
+(mse_svm_poly_test_2 = mean((svm_predict_poly_test_2 - ur_test$Unemployment_Rate)^2)) # 0.5671939
+
+# RMSE
+(rmse_svm_poly_test_2 = sqrt(mse_svm_poly_test_2))  # 0.75312
+```
+
+
+# --------------------------- ALL ML MODEL RESULTS  ------------------------------------------
+
+```{r}
+# MSE results all models
+# --------------------------------MSE train data 
+mse_ridge_train
+mse_lasso_train
+mse_cart_train
+mse_bag_train
+mse_rf_train
+mse_sgb_train
+mse_svm_linear_train
+mse_svm_radial_train
+mse_svm_poly_train
+
+
+#-------------------------------- RMSE train data
+rmse_ridge_train
+rmse_lasso_train
+rmse_cart_train
+rmse_bag_train
+rmse_rf_train
+rmse_sgb_train
+rmse_svm_linear_train
+rmse_svm_radial_train
+rmse_svm_poly_train
+
+#--------------------------------- MSE test Data
+mse_ridge_test
+mse_lasso_test
+mse_cart_test
+mse_bag_test
+mse_rf_test
+mse_sgb_test
+mse_svm_linear_test
+mse_svm_radial_test
+mse_svm_poly_test
+
+#--------------------------------- RMSE test Data
+rmse_ridge_test
+rmse_lasso_test
+rmse_cart_test
+rmse_bag_test
+rmse_rf_test
+rmse_sgb_test
+rmse_svm_linear_test
+rmse_svm_radial_test
+rmse_svm_poly_test
+
+
+MSE_TRAIN = c(mse_ridge_train, mse_lasso_train, mse_cart_train , mse_bag_train , mse_rf_train, mse_sgb_train, mse_svm_linear_train,mse_svm_radial_train,mse_svm_poly_train)
+
+RMSE_TRAIN = c(rmse_ridge_train, rmse_lasso_train, rmse_cart_train,rmse_bag_train, rmse_rf_train, rmse_sgb_train,rmse_svm_linear_train,rmse_svm_radial_train,rmse_svm_poly_train)
+
+MSE_TEST = c(mse_ridge_test, mse_lasso_test, mse_cart_test , mse_bag_test , mse_rf_test, mse_sgb_test, mse_svm_linear_test,mse_svm_radial_test,mse_svm_poly_test)
+
+RMSE_TEST = c(rmse_ridge_test, rmse_lasso_test, rmse_cart_test,rmse_bag_test, rmse_rf_test, rmse_sgb_test ,rmse_svm_linear_test,rmse_svm_radial_test,rmse_svm_poly_test)
+
+Models = c("RIDGE REGRESSION","LASSO REGRESSION","CART","BAGGING","RANDOM FOREST", "Stochastic Gradient Boosting", "SVM - Linear", "SVM - Radial", "SVM - Polynomial")
+
+
+ML_results = data.frame(Models,MSE_TRAIN,RMSE_TRAIN,MSE_TEST,RMSE_TEST)
+View(ML_results)
+
+# Find the minimum MSE and RMSE for training data
+(min_MSE_train = min(ML_results$MSE_TRAIN)) # Random Forest
+(min_RMSE_train = min(ML_results$RMSE_TRAIN)) # Random Forest
+
+# Find the minimum MSE and RMSE for test data
+(min_MSE_test = min(ML_results$MSE_TEST)) # SVM Polynomial
+(min_RMSE_test = min(ML_results$RMSE_TEST)) # SVM Polynomial
+```
+
+
+
+
+# -------------------------- ARTIFICIAL NEURAL NETWORKS ------------------------------------#
+# Neural Network Libraries
+```{r}
+# # Neural Network Library
+# # library(reticulate)
+# #install.packages("keras")
+# #library(keras)
+# #library(remotes)
+# remotes::install_github(paste0("rstudio/", c("reticulate", "tensorflow", "keras")))
+# reticulate::install_python()
+# install_tensorflow(envname = "r-tensorflow")
+# library(tensorflow)
+```
+
+# Data Partitioning
+```{r}
+set.seed(99) # Set the seed for model consistency
+
+# Training Data = Dec 1982 to Dec 2020
+ur_training_filter = (unemployment_rate$Year < 2021) | (unemployment_rate$Year == 2020 & unemployment_rate$Month == "Dec")
+# Test Data = Jan 2021 to March 2023
+ur_test_filter = (unemployment_rate$Year >= 2021) | (unemployment_rate$Year == 2021 & unemployment_rate$Month %in% c("Mar"))
+
+# Create the training and test sets
+ur_train = unemployment_rate[ur_training_filter, ]
+ur_test = unemployment_rate[ur_test_filter, ]
+
+# Remove Year, Month, and Quarter since they are not part of the original predictors
+ur_train = ur_train[, -c(2, 3, 4)]
+ur_test = ur_test[, -c(2, 3, 4)]
+
+# Seperate the response variables for train and test
+ur_train_nn_y = ur_train$Unemployment_Rate # Train response
+ur_test_nn_y = ur_test$Unemployment_Rate # Test response
+
+# Seperate predictor variables for train and test
+ur_train_nn_x = ur_train[,-1] # Train predictors
+ur_test_nn_x = ur_test[-1] # Test predictors
+
+# Scale the Data
+ur_train_nn_x_scaled = scale(ur_train_nn_x) # Scaled Predictor variables for Training Data
+ur_test_nn_x_scaled = scale(ur_test_nn_x) # Scaled Predictor variables for Training Data
+summary(ur_train_nn_x_scaled) # Check summary of the scaled data
+summary(ur_test_nn_x_scaled) # Check summary of test data
+
+dim(ur_train_nn_x_scaled)  # 156  x  7
+dim(ur_test_nn_x_scaled) # 10 x 7
+```
+
+
+```{r}
+# NN with adam
+
+# Define the neural network model
+nn_model_ur = keras_model_sequential() %>%
+  layer_dense(units = 64, activation = "relu", input_shape = c(ncol(ur_test_nn_x_scaled))) %>%
+  layer_dense(units = 64, activation = "relu") %>%
+  layer_dense(units = 1)
+
+# Define metrics
+nn_model_ur %>% compile(optimizer = "adam",
+                          loss = "mse",
+                          metric = c("mae"))
+
+
+# Create model history
+nn_model_ur_adam = nn_model_ur %>% fit(ur_train_nn_x_scaled, 
+                                               ur_train_nn_y,
+                                               epochs = 300,
+                                               batch_size = 8,
+                                               validation_split = 1/3) # Random fraction of the training data to be with-held during each epoch to be used as a pseudo validation data set and the remaining fraction of the training data are used as to train the network parameters during the epoch.
+
+
+# A plot of the bootstrapped validation MAE loss from network model training history.
+nn_epoch_plot_adam = data.frame(x = c(5:nn_model_ur_adam$params$epochs), 
+                                y = nn_model_ur_adam$metrics$val_mae[-c(1:4)])
+
+# Visualisation for the nn plots
+ggplot(nn_epoch_plot_adam, aes(x=x, y=y)) +geom_smooth() +xlab("epoch") +ylab("Estimated Validation MAE loss") + geom_vline(xintercept = 78, linetype="dotted", color = "orange", size=1)
+```
+
+# nn_model_ur_adam 
+Final epoch (plot to see history):
+    loss: 0.01979
+     mae: 0.09804
+val_loss: 3.782
+ val_mae: 1.633
+
+
+#  Build the model based on the Model based on the Lowest error rate ( Epoch value = 78) 
+```{r}
+#  Build the model based on the Model based on the Lowest error rate ( Epoch value = 78) 
+#----Train performance ----
+
+# Define the neural network model
+nn_model_ur_train = keras_model_sequential() %>%
+  layer_dense(units = 64, activation = "relu", input_shape = c(ncol(ur_train_nn_x_scaled))) %>%
+  layer_dense(units = 64, activation = "relu") %>%
+  layer_dense(units = 1)
+
+
+# Define metrics
+nn_model_ur_train %>% compile(optimizer = "adam",
+                          loss = "mse",
+                          metric = c("mae"))
+
+# Build the model on Training Data
+
+start_time_18 = Sys.time()  # Start the timer
+set.seed(99)
+nn_model_ur_train %>% fit(ur_train_nn_x_scaled, 
+                      ur_train_nn_y,
+                      epochs = 78, # Optimal epoch value derived from ggplot
+                      validation_data = list(ur_train_nn_x_scaled,ur_train_nn_y),
+                      verbose = 1) 
+
+end_time_18 = Sys.time()  # End the timer
+(time_diff_18 = end_time_18 - start_time_18) # Time difference 
+
+# Model Performance on Training Data
+# After the network has been tuned to a suitable number of epochs, the validation data can be predicted using the evaluate() function.
+nn_model_results_ur_adam_train = nn_model_ur_train %>% evaluate(ur_train_nn_x_scaled , ur_train_nn_y)
+
+nn_model_results_ur_adam_train # Model results (summary)
+
+#----Test performance ----
+
+# Define the neural network model
+rm(nn_model_ur_2)
+nn_model_ur_2 <- keras_model_sequential() %>%
+  layer_dense(units = 64, activation = "relu", input_shape = c(ncol(ur_test_nn_x_scaled))) %>%
+  layer_dense(units = 64, activation = "relu") %>%
+  layer_dense(units = 1)
+
+
+# Define metrics
+nn_model_ur_2 %>% compile(optimizer = "adam",
+                          loss = "mse",
+                          metric = c("mae"))
+
+start_time_19 = Sys.time()  # Start the timer
+set.seed(99)
+nn_model_ur_2 %>% fit(ur_train_nn_x_scaled, 
+                      ur_train_nn_y,
+                      epochs = 78, # Optimal epoch value derived from ggplot
+                      validation_data = list(ur_test_nn_x_scaled,ur_test_nn_y),
+                      verbose = 1) 
+end_time_19 = Sys.time()  # End the timer
+(time_diff_19 = end_time_19 - start_time_19) 
+
+# Model Performance on Test Data
+# After the network has been tuned to a suitable number of epochs, the validation data can be predicted using the evaluate() function.
+nn_model_results_ur_adam_2 = nn_model_ur_2 %>% evaluate(ur_test_nn_x_scaled , ur_test_nn_y)
+
+nn_model_results_ur_adam_2 # Model results (summary)
+```
+# Model Results:
+
+# TRAIN DATA RESULTS:
+loss       mae 
+0.5611840 0.5605854
+
+# TEST DATA RESULTS:
+nn_model_results_ur_adam_2 # Model results (summary)
+     loss       mae 
+10.342458  2.632585
+
+Model: "sequential_1152"
+_________________________________________
+ Layer (type)                                          Output Shape                                     Param #            
+===========================================================================================================================
+ dense_3596 (Dense)                                    (None, 64)                                       512                
+ dense_3595 (Dense)                                    (None, 64)                                       4160               
+ dense_3594 (Dense)                                    (None, 1)                                        65                 
+===========================================================================================================================
+Total params: 4737 (18.50 KB)
+Trainable params: 4737 (18.50 KB)
+Non-trainable params: 0 (0.00 Byte)
+_________________________________________
+
+# -------------------- Hyper parameter tuning -----------------------------------#
+
+# Hyper parametertuning
+```{r}
+# Define hyperparameters
+epochs_list_ = c(70, 80, 90, 100)
+units_list_ = c(30, 60, 90)
+batch_sizes_ = c(10, 30, 50, 70)
+
+# Create a data frame with all combinations of hyperparameters
+hyperparameter_combinations = expand.grid(epochs = epochs_list_, units = units_list_, batch_size = batch_sizes_)
+
+# Initialize variables to store the best results and hyperparameters
+best_train_loss = Inf
+best_hyperparameters = NULL
+
+start_time_19 = Sys.time()  # Start the timer
+set.seed(99)
+# Iterate through hyperparameter combinations
+for (i in 1:nrow(hyperparameter_combinations)) 
+  {
+    epochs = hyperparameter_combinations$epochs[i]
+    units = hyperparameter_combinations$units[i]
+    batch_size = hyperparameter_combinations$batch_size[i]
+    
+    cat("Training model with epochs =", epochs, "units =", units, "batch size =", batch_size, "\n")
+    
+    # Define the neural network model
+    nn_model= keras_model_sequential() %>%
+      layer_dense(units = units, activation = "relu", input_shape = c(ncol(ur_train_nn_x_scaled))) %>%
+      layer_dense(units = units, activation = "relu") %>%
+      layer_dense(units = units, activation = "relu") %>%
+      layer_dense(units = 1)
+    
+    # Compile the model
+    nn_model %>% compile(optimizer = "adam",
+                         loss = "mse",
+                         metrics = c("mae"))
+    
+    # Train the model on Training Data
+    set.seed(99)
+    history = nn_model %>% fit(ur_train_nn_x_scaled, 
+                                ur_train_nn_y,
+                                epochs = epochs,
+                                batch_size = batch_size,
+                                validation_data = list(ur_train_nn_x_scaled, ur_train_nn_y),
+                                verbose = 1)
+    
+    # Model Performance on Test Data
+    nn_model_results_train = nn_model %>% evaluate(ur_train_nn_x_scaled, ur_train_nn_y)
+    cat("Test results (summary):\n")
+    print(nn_model_results_train)
+    
+    # Check if the current test results are better than the best so far
+    if (nn_model_results_train[[1]] < best_train_loss) 
+      {
+        (best_train_loss = nn_model_results_train[[1]])
+        (best_hyperparameters = c(epochs, units, batch_size))
+      }
+}
+end_time_19 = Sys.time()  # End the timer
+(time_diff_19 = end_time_19 - start_time_19) # Time difference of 12.48 minutes
+
+# Print the best hyperparameter results
+cat("Best Hyperparameters:\n")
+cat("Epochs:", best_hyperparameters[1], "\n") 
+cat("Units:", best_hyperparameters[2], "\n") 
+cat("Batch Size:", best_hyperparameters[3], "\n")
+cat("Best Train Loss:", best_train_loss,"\n")
+
+
+```
+
+#Best Hyperparameters:
+#> cat("Epochs:", best_hyperparameters[1], "\n")
+Epochs: 90 
+#> cat("Units:", best_hyperparameters[2], "\n")
+Units: 90 
+#> cat("Batch Size:", best_hyperparameters[3], "\n")
+Batch Size: 10 
+#> cat("Best Test Loss:", best_test_loss,"\n")
+Best Train Loss: 0.08561801
+
+# Build the model using the Optimal Hyperparameters (epoch = 90, units = 90, batch_size  = 10)
+```{r}
+#---- Prediction on  test data --- 
+#Optimal values: epoch = 90, units = 90, batch_size  = 10.
+# Layers
+best_nn_model = keras_model_sequential() %>%
+  layer_dense(units = 90, activation = "relu", input_shape = c(ncol(ur_test_nn_x_scaled))) %>%
+  layer_dense(units = 90, activation = "relu") %>%
+  layer_dense(units = 1)
+
+# Define metrics
+best_nn_model %>% compile(optimizer = "adam",
+                          loss = "mse",
+                          metrics = c("mae"))
+
+# Set seed for model consistency
+set.seed(99)
+start_time_best_nn = Sys.time()  # Start the timer
+
+# Build the model
+best_nn_model %>% fit(ur_train_nn_x_scaled,
+                 ur_train_nn_y,
+                 epochs = 90,
+                 batch_size = 10,
+                 validation_data = list(ur_test_nn_x_scaled, ur_test_nn_y)) 
+
+end_time_best_nn = Sys.time()  # End the timer
+(time_diff_best_nn = end_time_best_nn - start_time_best_nn) # Time difference of 16.3403 secs
+
+# After the network has been tuned , the validation data can be predicted using the evaluate() function.
+best_nn_model_result = best_nn_model %>% evaluate(ur_test_nn_x_scaled, ur_test_nn_y)
+
+best_nn_model_result # Model summary
+
+#    MSE      mae 
+# 9.271559 2.466631  
+
+#RMSE
+(best_nn_model_result_rmse = sqrt(best_nn_model_result[['loss']])) # 3.044923
+```
+
+# Model results:
+
+Model: "sequential_1487"
+_________________________________________
+ Layer (type)                                          Output Shape                                     Param #            
+===========================================================================================================================
+ dense_4930 (Dense)                                    (None, 90)                                       720                
+ dense_4929 (Dense)                                    (None, 90)                                       8190               
+ dense_4928 (Dense)                                    (None, 1)                                        91                 
+===========================================================================================================================
+Total params: 9001 (35.16 KB)
+Trainable params: 9001 (35.16 KB)
+Non-trainable params: 0 (0.00 Byte)
+_________________________________________
+
+#    MSE      mae 
+# 9.271559 2.466631  
+
